@@ -3,10 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef, useState } from 'react';
-import * as THREE from 'three';
-import { AppSettings } from '../types';
-import { RefreshCw, ZoomIn, ZoomOut, Move, Image as ImageIcon } from 'lucide-react';
+import React, { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
+import { AppSettings } from "../types";
+import {
+  RefreshCw,
+  ZoomIn,
+  ZoomOut,
+  Move,
+  Image as ImageIcon,
+} from "lucide-react";
 
 interface CanvasViewportProps {
   settings: AppSettings;
@@ -17,7 +23,7 @@ interface CanvasViewportProps {
     generateSVG: () => string | null;
   } | null>;
   onChange?: (updater: (prev: AppSettings) => AppSettings) => void;
-  activePage: 'main' | 'gradient';
+  activePage: "main" | "gradient";
 }
 
 export default function CanvasViewport({
@@ -30,7 +36,7 @@ export default function CanvasViewport({
 }: CanvasViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  
+
   // Three.js internal references
   const mainSceneRef = useRef<THREE.Scene | null>(null);
   const meshGroupRef = useRef<THREE.Group | null>(null);
@@ -39,7 +45,7 @@ export default function CanvasViewport({
   const fillLightRef = useRef<THREE.DirectionalLight | null>(null);
   const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
   const envTextureRef = useRef<THREE.Texture | null>(null);
-  
+
   // Custom Shader Render Pipeline refs
   const renderTargetRef = useRef<THREE.WebGLRenderTarget | null>(null);
   const postSceneRef = useRef<THREE.Scene | null>(null);
@@ -62,11 +68,11 @@ export default function CanvasViewport({
   const meshRotationXRef = useRef(0.3);
   const meshRotationYRef = useRef(0.4);
   const dragMomentumVelocityRef = useRef({ x: 0, y: 0 });
-  
+
   // Drag flow offset refs
   const dragFlowOffsetRef = useRef({ x: 0, y: 0 });
   const dragFlowVelocityRef = useRef({ x: 0, y: 0 });
-  
+
   // Hover & mouse coordinates
   const mousePositionRef = useRef({ x: 0, y: 0 });
   const hoverProgressRef = useRef(0);
@@ -93,33 +99,44 @@ export default function CanvasViewport({
       viewportRef.current = {
         getPNGDataURL: () => {
           if (!rendererRef.current || !canvasRef.current) return null;
-          
+
           // Ensure renderer clear color matches background settings for correct capture
           if (settings.background.transparent) {
             rendererRef.current.setClearColor(0x000000, 0);
           } else {
-            rendererRef.current.setClearColor(new THREE.Color(settings.background.color), 1);
+            rendererRef.current.setClearColor(
+              new THREE.Color(settings.background.color),
+              1,
+            );
           }
 
           // Capture the last frame accurately, without alpha overlay if not transparent
           rendererRef.current.render(
             postSceneRef.current || mainSceneRef.current!,
-            postCameraRef.current || cameraRef.current!
+            postCameraRef.current || cameraRef.current!,
           );
-          return canvasRef.current.toDataURL('image/png');
+          return canvasRef.current.toDataURL("image/png");
         },
         generateSVG: () => {
           // Generates a vectorized SVG replica of the active halftone screen with specular highlights & realistic shadows
-          if (!canvasRef.current || !renderTargetRef.current || !rendererRef.current) return null;
-          
+          if (
+            !canvasRef.current ||
+            !renderTargetRef.current ||
+            !rendererRef.current
+          )
+            return null;
+
           // Force a final render to ensure current halftone state is captured
           const useHalftone = settings.halftone.enabled;
-          
+
           // Ensure renderer clear color matches background settings for correct capture
           if (settings.background.transparent) {
             rendererRef.current.setClearColor(0x000000, 0);
           } else {
-            rendererRef.current.setClearColor(new THREE.Color(settings.background.color), 1);
+            rendererRef.current.setClearColor(
+              new THREE.Color(settings.background.color),
+              1,
+            );
           }
 
           // Ensure unhalftoned 3D scene is rendered into the offscreen render target to refresh its pixels
@@ -130,17 +147,24 @@ export default function CanvasViewport({
 
           rendererRef.current.setRenderTarget(null);
           rendererRef.current.render(
-            useHalftone ? (postSceneRef.current || mainSceneRef.current!) : mainSceneRef.current!,
-            useHalftone ? (postCameraRef.current || cameraRef.current!) : cameraRef.current!
+            useHalftone
+              ? postSceneRef.current || mainSceneRef.current!
+              : mainSceneRef.current!,
+            useHalftone
+              ? postCameraRef.current || cameraRef.current!
+              : cameraRef.current!,
           );
 
           const width = canvasRef.current.clientWidth || 930;
           const height = canvasRef.current.clientHeight || 614;
-          const bgColor = settings.background.transparent ? 'none' : settings.background.color;
-          
+          const bgColor = settings.background.transparent
+            ? "none"
+            : settings.background.color;
+
           // If halftone pattern is not active, export as a beautiful high-fidelity rasterized image inside SVG
           if (!useHalftone) {
-            const dataURL = rendererRef.current.domElement.toDataURL('image/png');
+            const dataURL =
+              rendererRef.current.domElement.toDataURL("image/png");
             return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" style="background: ${bgColor}"><image href="${dataURL}" width="${width}" height="${height}"/></svg>`;
           }
 
@@ -154,19 +178,28 @@ export default function CanvasViewport({
           const rtWidth = renderTargetRef.current.width;
           const rtHeight = renderTargetRef.current.height;
           const pixels = new Uint8Array(rtWidth * rtHeight * 4);
-          
+
           // Force standard binding and read the pixels
-          rendererRef.current.readRenderTargetPixels(renderTargetRef.current, 0, 0, rtWidth, rtHeight, pixels);
+          rendererRef.current.readRenderTargetPixels(
+            renderTargetRef.current,
+            0,
+            0,
+            rtWidth,
+            rtHeight,
+            pixels,
+          );
 
           // Prepare beautiful SVG
           let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" style="background: ${bgColor}">\n`;
-          
+
           // Set up CSS dynamic animations keyframes
-          let styleContent = '';
+          let styleContent = "";
           const groupClasses: string[] = [];
 
           if (settings.animation.breatheEnabled) {
-            const speedSec = (1 / (settings.animation.breatheSpeed || 0.4)).toFixed(2);
+            const speedSec = (
+              1 / (settings.animation.breatheSpeed || 0.4)
+            ).toFixed(2);
             styleContent += `
     @keyframes svg-breathe {
       0%, 100% { transform: scale(1.0); }
@@ -178,11 +211,13 @@ export default function CanvasViewport({
       -webkit-transform-origin: center;
       animation: svg-breathe ${speedSec}s ease-in-out infinite;
     }`;
-            groupClasses.push('svg-animated-breathe');
+            groupClasses.push("svg-animated-breathe");
           }
 
           if (settings.animation.floatEnabled) {
-            const speedSec = (1 / (settings.animation.floatSpeed || 0.45)).toFixed(2);
+            const speedSec = (
+              1 / (settings.animation.floatSpeed || 0.45)
+            ).toFixed(2);
             const amtPx = (settings.animation.floatAmplitude * 25).toFixed(1);
             styleContent += `
     @keyframes svg-float {
@@ -195,11 +230,13 @@ export default function CanvasViewport({
       -webkit-transform-origin: center;
       animation: svg-float ${speedSec}s ease-in-out infinite;
     }`;
-            groupClasses.push('svg-animated-float');
+            groupClasses.push("svg-animated-float");
           }
 
           if (settings.animation.autoRotateEnabled) {
-            const speedSec = (60 / (settings.animation.autoSpeed || 0.5)).toFixed(2);
+            const speedSec = (
+              60 / (settings.animation.autoSpeed || 0.5)
+            ).toFixed(2);
             styleContent += `
     @keyframes svg-rotate {
       0% { transform: rotate(0deg); }
@@ -211,7 +248,7 @@ export default function CanvasViewport({
       -webkit-transform-origin: center;
       animation: svg-rotate ${speedSec}s linear infinite;
     }`;
-            groupClasses.push('svg-animated-rotate');
+            groupClasses.push("svg-animated-rotate");
           } else if (settings.animation.autoWobble > 0) {
             styleContent += `
     @keyframes svg-wobble {
@@ -224,7 +261,7 @@ export default function CanvasViewport({
       -webkit-transform-origin: center;
       animation: svg-wobble 5s ease-in-out infinite;
     }`;
-            groupClasses.push('svg-animated-wobble');
+            groupClasses.push("svg-animated-wobble");
           }
 
           // Inject high-precision vector filters & radial gradients to replicate live GPU shaders!
@@ -244,7 +281,7 @@ export default function CanvasViewport({
       <stop offset="100%" stop-color="#000000" stop-opacity="0.18" />
     </linearGradient>
   </defs>\n`;
-          
+
           if (styleContent) {
             svgContent += `  <style>${styleContent}</style>\n`;
           }
@@ -266,7 +303,7 @@ export default function CanvasViewport({
               r: pixels[idx] / 255,
               g: pixels[idx + 1] / 255,
               b: pixels[idx + 2] / 255,
-              a: pixels[idx + 3] / 255
+              a: pixels[idx + 3] / 255,
             };
           };
 
@@ -277,7 +314,7 @@ export default function CanvasViewport({
           const rangeX = Math.ceil(scale * aspectRatio * bufferFactor);
 
           if (groupClasses.length > 0) {
-            svgContent += `  <g class="${groupClasses.join(' ')}">\n`;
+            svgContent += `  <g class="${groupClasses.join(" ")}">\n`;
           }
 
           for (let gx = -rangeX; gx <= rangeX; gx++) {
@@ -290,8 +327,10 @@ export default function CanvasViewport({
               const waveFreq = settings.halftone.waveFrequency ?? 2.5;
               const curTime = timeRef.current;
               if (waveAmp > 0.0) {
-                const swayX = Math.sin(gridUvY * 0.5 + curTime * waveFreq) * waveAmp;
-                const swayY = Math.cos(gridUvX * 0.5 + curTime * waveFreq) * waveAmp;
+                const swayX =
+                  Math.sin(gridUvY * 0.5 + curTime * waveFreq) * waveAmp;
+                const swayY =
+                  Math.cos(gridUvX * 0.5 + curTime * waveFreq) * waveAmp;
                 gridUvX += swayX;
                 gridUvY += swayY;
               }
@@ -308,7 +347,7 @@ export default function CanvasViewport({
               const unY = localX * s + localY * c;
 
               // Un-adjust for aspect ratio to get normalized screen UV
-              const uvX = (unX / aspectRatio) + 0.5;
+              const uvX = unX / aspectRatio + 0.5;
               const uvY = unY + 0.5;
 
               // Skip cells whose centers lie outside visible screen boundary
@@ -326,12 +365,16 @@ export default function CanvasViewport({
               }
 
               // Calculate luminance & contrast matching the fragment shader exactly
-              let luminance = 0.299 * pixel.r + 0.587 * pixel.g + 0.114 * pixel.b;
+              let luminance =
+                0.299 * pixel.r + 0.587 * pixel.g + 0.114 * pixel.b;
               const contrast = settings.halftone.imageContrast;
-              luminance = Math.max(0.0, Math.min(1.0, (luminance - 0.5) * contrast + 0.5));
+              luminance = Math.max(
+                0.0,
+                Math.min(1.0, (luminance - 0.5) * contrast + 0.5),
+              );
 
               // Compute tone val multiplier
-              const val = (toneTarget === 'light') ? luminance : (1.0 - luminance);
+              const val = toneTarget === "light" ? luminance : 1.0 - luminance;
 
               // Sizing threshold matching the shader
               const cellRadius = val * dotWidth * spacing * 0.5;
@@ -350,26 +393,36 @@ export default function CanvasViewport({
                   const patColor = new THREE.Color(patternColor);
                   const minIntensity = 1.0 - shadowOpacity * 0.75;
                   const maxIntensity = 1.0 + shadowOpacity * 0.45;
-                  const lightingIntensity = minIntensity + (maxIntensity - minIntensity) * luminance;
-                  
+                  const lightingIntensity =
+                    minIntensity + (maxIntensity - minIntensity) * luminance;
+
                   let pr = patColor.r * lightingIntensity;
                   let pg = patColor.g * lightingIntensity;
                   let pb = patColor.b * lightingIntensity;
 
                   // Apply high-contrast specular reflection glint based on pixel brightness
-                  const spec = Math.max(0.0, Math.min(1.0, (luminance - 0.48) * 2.8));
-                  r = Math.round(THREE.MathUtils.lerp(pr, 1.0, spec * 0.95) * 255);
-                  g = Math.round(THREE.MathUtils.lerp(pg, 1.0, spec * 0.95) * 255);
-                  b = Math.round(THREE.MathUtils.lerp(pb, 1.0, spec * 0.95) * 255);
+                  const spec = Math.max(
+                    0.0,
+                    Math.min(1.0, (luminance - 0.48) * 2.8),
+                  );
+                  r = Math.round(
+                    THREE.MathUtils.lerp(pr, 1.0, spec * 0.95) * 255,
+                  );
+                  g = Math.round(
+                    THREE.MathUtils.lerp(pg, 1.0, spec * 0.95) * 255,
+                  );
+                  b = Math.round(
+                    THREE.MathUtils.lerp(pb, 1.0, spec * 0.95) * 255,
+                  );
                 }
 
                 const resolvedColor = `rgb(${r}, ${g}, ${b})`;
 
-                if (patternType === 'squares') {
+                if (patternType === "squares") {
                   const rad = (gridRotAngle * Math.PI) / 180;
                   const cosR = Math.cos(rad);
                   const sinR = Math.sin(rad);
-                  
+
                   svgContent += `  <g opacity="${mask.toFixed(2)}">\n`;
                   // Compute perfect rotated square polygon corners
                   const ux_x = cellRadius * cosR;
@@ -391,12 +444,12 @@ export default function CanvasViewport({
                   // Flat metallic linear gloss on top
                   svgContent += `    <polygon points="${p1x},${p1y} ${p2x},${p2y} ${p3x},${p3y} ${p4x},${p4y}" fill="url(#svg-rect-gloss)" />\n`;
                   svgContent += `  </g>\n`;
-                } else if (patternType === 'lines') {
+                } else if (patternType === "lines") {
                   // Replaced line pattern with properly centered <circle> elements, mapping density and scale to radius
                   const finalRadius = Math.max(0.15, cellRadius);
                   svgContent += `  <g opacity="${mask.toFixed(2)}">\n`;
                   svgContent += `    <circle cx="${cx_un.toFixed(1)}" cy="${cy_un.toFixed(1)}" r="${finalRadius.toFixed(1)}" fill="${resolvedColor}" filter="url(#svg-dot-shadow)" />\n`;
-                  
+
                   const glossRadius = finalRadius * 0.42;
                   const gx = cx_un - finalRadius * 0.32;
                   const gy = cy_un - finalRadius * 0.32;
@@ -404,12 +457,12 @@ export default function CanvasViewport({
                     svgContent += `    <circle cx="${gx.toFixed(1)}" cy="${gy.toFixed(1)}" r="${glossRadius.toFixed(1)}" fill="url(#svg-gloss-overlay)" opacity="0.9" />\n`;
                   }
                   svgContent += `  </g>\n`;
-                } else if (patternType === 'crosshatch') {
+                } else if (patternType === "crosshatch") {
                   // Replaced crosshatch pattern with properly centered <circle> elements, mapping density and scale to radius
                   const finalRadius = Math.max(0.15, cellRadius);
                   svgContent += `  <g opacity="${mask.toFixed(2)}">\n`;
                   svgContent += `    <circle cx="${cx_un.toFixed(1)}" cy="${cy_un.toFixed(1)}" r="${finalRadius.toFixed(1)}" fill="${resolvedColor}" filter="url(#svg-dot-shadow)" />\n`;
-                  
+
                   const glossRadius = finalRadius * 0.42;
                   const gx = cx_un - finalRadius * 0.32;
                   const gy = cy_un - finalRadius * 0.32;
@@ -417,12 +470,13 @@ export default function CanvasViewport({
                     svgContent += `    <circle cx="${gx.toFixed(1)}" cy="${gy.toFixed(1)}" r="${glossRadius.toFixed(1)}" fill="url(#svg-gloss-overlay)" opacity="0.9" />\n`;
                   }
                   svgContent += `  </g>\n`;
-                } else { // Default to 'dots' (proper circles)
+                } else {
+                  // Default to 'dots' (proper circles)
                   const finalRadius = Math.max(0.15, cellRadius);
                   svgContent += `  <g opacity="${mask.toFixed(2)}">\n`;
                   // Base 3D shadow circle
                   svgContent += `    <circle cx="${cx_un.toFixed(1)}" cy="${cy_un.toFixed(1)}" r="${finalRadius.toFixed(1)}" fill="${resolvedColor}" filter="url(#svg-dot-shadow)" />\n`;
-                  
+
                   // Glass glint glossy overlay
                   const glossRadius = finalRadius * 0.42;
                   const gx = cx_un - finalRadius * 0.32;
@@ -440,9 +494,9 @@ export default function CanvasViewport({
             svgContent += `  </g>\n`;
           }
 
-          svgContent += '</svg>';
+          svgContent += "</svg>";
           return svgContent;
-        }
+        },
       };
     }
   }, [settings, isHovered]);
@@ -455,31 +509,34 @@ export default function CanvasViewport({
   }, [settings.distance]);
 
   // Helper to load image src as THREE.Texture asynchronously
-  const loadTextureAsync = (src: string | null): Promise<THREE.Texture | null> => {
+  const loadTextureAsync = (
+    src: string | null,
+  ): Promise<THREE.Texture | null> => {
     return new Promise((resolve) => {
       if (!src) {
         resolve(null);
         return;
       }
-      
+
       let processedSrc = src;
-      if (src.startsWith('data:image/svg+xml') && !src.includes(';base64,')) {
-        const parts = src.split(',');
+      if (src.startsWith("data:image/svg+xml") && !src.includes(";base64,")) {
+        const parts = src.split(",");
         if (parts.length > 1) {
-          const rawContent = parts.slice(1).join(',').replace(/%23/g, '#');
+          const rawContent = parts.slice(1).join(",").replace(/%23/g, "#");
           try {
             const base64Data = btoa(unescape(encodeURIComponent(rawContent)));
-            processedSrc = 'data:image/svg+xml;base64,' + base64Data;
+            processedSrc = "data:image/svg+xml;base64," + base64Data;
           } catch (err) {
             console.error("Base64 SVG mapping failed, fallback used", err);
-            processedSrc = 'data:image/svg+xml;utf8,' + encodeURIComponent(rawContent);
+            processedSrc =
+              "data:image/svg+xml;utf8," + encodeURIComponent(rawContent);
           }
         }
       }
 
       const img = new Image();
-      if (!processedSrc.startsWith('data:')) {
-        img.crossOrigin = 'anonymous';
+      if (!processedSrc.startsWith("data:")) {
+        img.crossOrigin = "anonymous";
       }
       img.onload = () => {
         const texture = new THREE.Texture(img);
@@ -497,7 +554,13 @@ export default function CanvasViewport({
   };
 
   // Re-build custom geometry details depending on shapeKey
-  const updateGeometry = async (shapeKey: string, sourceMode: string, textStr: string, imageSrc: string | null, fontBold: boolean) => {
+  const updateGeometry = async (
+    shapeKey: string,
+    sourceMode: string,
+    textStr: string,
+    imageSrc: string | null,
+    fontBold: boolean,
+  ) => {
     if (!meshGroupRef.current) return;
     setLoading(true);
 
@@ -505,16 +568,16 @@ export default function CanvasViewport({
 
     // Load texture if we have any imageSrc
     let loadedTexture: THREE.Texture | null = null;
-    
-    if (sourceMode === 'video' && settings.videoSrc) {
-       const video = document.createElement('video');
-       video.src = settings.videoSrc;
-       video.loop = true;
-       video.muted = true;
-       video.play();
-       loadedTexture = new THREE.VideoTexture(video);
+
+    if (sourceMode === "video" && settings.videoSrc) {
+      const video = document.createElement("video");
+      video.src = settings.videoSrc;
+      video.loop = true;
+      video.muted = true;
+      video.play();
+      loadedTexture = new THREE.VideoTexture(video);
     } else if (imageSrc) {
-       loadedTexture = await loadTextureAsync(imageSrc);
+      loadedTexture = await loadTextureAsync(imageSrc);
     }
 
     // If a newer geometry request has started in the meantime, abort and clean up loaded texture!
@@ -536,11 +599,11 @@ export default function CanvasViewport({
       roughness: settings.material.roughness,
       metalness: settings.material.metalness,
       envMapIntensity: settings.material.environmentPower,
-      wireframe: settings.material.surface === 'wireframe',
+      wireframe: settings.material.surface === "wireframe",
       flatShading: false,
     };
 
-    if (settings.material.surface === 'glass') {
+    if (settings.material.surface === "glass") {
       baseColorParams.transparent = false;
       baseColorParams.opacity = 1.0;
       baseColorParams.transmission = 0.65;
@@ -550,7 +613,7 @@ export default function CanvasViewport({
       baseColorParams.metalness = Math.max(0.1, settings.material.metalness);
       baseColorParams.clearcoat = 1.0;
       baseColorParams.clearcoatRoughness = 0.05;
-    } else if (settings.material.surface === 'solid') {
+    } else if (settings.material.surface === "solid") {
       baseColorParams.clearcoat = 0.5;
       baseColorParams.clearcoatRoughness = 0.1;
     }
@@ -561,10 +624,10 @@ export default function CanvasViewport({
       roughness: settings.material.roughness,
       metalness: settings.material.metalness,
       envMapIntensity: settings.material.environmentPower,
-      wireframe: settings.material.surface === 'wireframe',
+      wireframe: settings.material.surface === "wireframe",
       flatShading: false,
     };
-    if (settings.material.surface === 'glass') {
+    if (settings.material.surface === "glass") {
       rimDetailParams.transparent = true;
       rimDetailParams.opacity = 0.7;
       rimDetailParams.transmission = 0.85;
@@ -574,7 +637,7 @@ export default function CanvasViewport({
       rimDetailParams.metalness = Math.max(0.1, settings.material.metalness);
       rimDetailParams.clearcoat = 1.0;
       rimDetailParams.clearcoatRoughness = 0.05;
-    } else if (settings.material.surface === 'solid') {
+    } else if (settings.material.surface === "solid") {
       rimDetailParams.clearcoat = 0.5;
       rimDetailParams.clearcoatRoughness = 0.1;
     }
@@ -584,7 +647,7 @@ export default function CanvasViewport({
     if (loadedTexture) {
       const overlayParams: any = {
         map: loadedTexture,
-        color: new THREE.Color('#ffffff'),
+        color: new THREE.Color("#ffffff"),
         roughness: settings.material.roughness,
         metalness: settings.material.metalness,
         envMapIntensity: settings.material.environmentPower,
@@ -596,13 +659,13 @@ export default function CanvasViewport({
         polygonOffsetUnits: -4.0,
       };
 
-      if (settings.material.surface === 'glass') {
+      if (settings.material.surface === "glass") {
         overlayParams.transmission = 0.35;
         overlayParams.ior = settings.material.refraction;
         overlayParams.thickness = settings.material.thickness / 100.0;
         overlayParams.clearcoat = 1.0;
         overlayParams.clearcoatRoughness = 0.05;
-      } else if (settings.material.surface === 'solid') {
+      } else if (settings.material.surface === "solid") {
         overlayParams.clearcoat = 0.4;
         overlayParams.clearcoatRoughness = 0.1;
       }
@@ -612,7 +675,7 @@ export default function CanvasViewport({
     const applyShapeModifiers = (geom: THREE.BufferGeometry) => {
       const mods = settings.shapeModifiers;
       if (!mods || !geom.attributes.position) return;
-      
+
       geom.computeVertexNormals();
       const posAttribute = geom.attributes.position;
       const normalAttribute = geom.attributes.normal;
@@ -628,12 +691,14 @@ export default function CanvasViewport({
         let amp = 0.5;
         let f = scale;
         // 3 octaves for some rock-like texture
-        for(let o = 0; o < 3; o++) {
-           n += amp * Math.sin(x * f + Math.cos(y * f)) * 
-                      Math.sin(y * f + Math.cos(z * f)) * 
-                      Math.sin(z * f + Math.cos(x * f));
-           f *= 2.03;
-           amp *= 0.5;
+        for (let o = 0; o < 3; o++) {
+          n +=
+            amp *
+            Math.sin(x * f + Math.cos(y * f)) *
+            Math.sin(y * f + Math.cos(z * f)) *
+            Math.sin(z * f + Math.cos(x * f));
+          f *= 2.03;
+          amp *= 0.5;
         }
         return n;
       };
@@ -650,9 +715,10 @@ export default function CanvasViewport({
         if (mods.rippleAmount > 0) {
           hasMods = true;
           const rf = mods.rippleFrequency;
-          const dist = Math.sqrt(x*x + y*y + z*z);
+          const dist = Math.sqrt(x * x + y * y + z * z);
           // Try to make a very organic fluid ripple
-          const ripple = Math.sin(x * rf + dist) * Math.cos(y * rf) * Math.sin(z * rf);
+          const ripple =
+            Math.sin(x * rf + dist) * Math.cos(y * rf) * Math.sin(z * rf);
           const push = ripple * mods.rippleAmount;
           x += nx * push;
           y += ny * push;
@@ -662,7 +728,12 @@ export default function CanvasViewport({
         // Noise Displacement (Craters / Rocks)
         if (mods.noiseAmount !== 0) {
           hasMods = true;
-          const nVal = fbm(origPos[i*3], origPos[i*3+1], origPos[i*3+2], mods.noiseScale);
+          const nVal = fbm(
+            origPos[i * 3],
+            origPos[i * 3 + 1],
+            origPos[i * 3 + 2],
+            mods.noiseScale,
+          );
           x += nx * (nVal * mods.noiseAmount);
           y += ny * (nVal * mods.noiseAmount);
           z += nz * (nVal * mods.noiseAmount);
@@ -672,10 +743,13 @@ export default function CanvasViewport({
         if (mods.spikeAmount !== 0) {
           hasMods = true;
           // create a spiky frequency
-          const sx = origPos[i*3] * 15.0;
-          const sy = origPos[i*3+1] * 15.0;
-          const sz = origPos[i*3+2] * 15.0;
-          let spike = Math.pow(Math.abs(Math.sin(sx) * Math.sin(sy) * Math.sin(sz)), 10.0);
+          const sx = origPos[i * 3] * 15.0;
+          const sy = origPos[i * 3 + 1] * 15.0;
+          const sz = origPos[i * 3 + 2] * 15.0;
+          let spike = Math.pow(
+            Math.abs(Math.sin(sx) * Math.sin(sy) * Math.sin(sz)),
+            10.0,
+          );
           x += nx * (spike * mods.spikeAmount);
           y += ny * (spike * mods.spikeAmount);
           z += nz * (spike * mods.spikeAmount);
@@ -714,13 +788,13 @@ export default function CanvasViewport({
 
     let activeMesh: THREE.Object3D | null = null;
 
-    if (sourceMode === 'shape') {
+    if (sourceMode === "shape") {
       let isCompositeGroup = false;
       const compositeGroup = new THREE.Group();
       let geometry: THREE.BufferGeometry | null = null;
 
       switch (shapeKey) {
-        case 'star':
+        case "star":
           {
             const starShape = new THREE.Shape();
             const outerRadius = 1.4;
@@ -729,45 +803,91 @@ export default function CanvasViewport({
             for (let i = 0; i < points * 2; i++) {
               const radius = i % 2 === 0 ? outerRadius : innerRadius;
               const a = (i / (points * 2)) * Math.PI * 2;
-              if (i === 0) starShape.moveTo(Math.sin(a) * radius, Math.cos(a) * radius);
+              if (i === 0)
+                starShape.moveTo(Math.sin(a) * radius, Math.cos(a) * radius);
               else starShape.lineTo(Math.sin(a) * radius, Math.cos(a) * radius);
             }
             starShape.closePath();
-            geometry = new THREE.ExtrudeGeometry(starShape, { depth: 0.4, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.1, bevelSegments: 3 });
+            geometry = new THREE.ExtrudeGeometry(starShape, {
+              depth: 0.4,
+              bevelEnabled: true,
+              bevelThickness: 0.1,
+              bevelSize: 0.1,
+              bevelSegments: 3,
+            });
             // Align center
             geometry.center();
           }
           break;
-        case 'heart':
+        case "heart":
           {
             const heartShape = new THREE.Shape();
-            const x = 0, y = 0;
-            heartShape.moveTo( x + .25, y + .25 );
-            heartShape.bezierCurveTo( x + .25, y + .25, x + .20, y, x, y );
-            heartShape.bezierCurveTo( x - .30, y, x - .30, y + .35,x - .30,y + .35 );
-            heartShape.bezierCurveTo( x - .30, y + .55, x - .10, y + .77, x + .25, y + .95 );
-            heartShape.bezierCurveTo( x + .60, y + .77, x + .80, y + .55, x + .80, y + .35 );
-            heartShape.bezierCurveTo( x + .80, y + .35, x + .80, y, x + .50, y );
-            heartShape.bezierCurveTo( x + .35, y, x + .25, y + .25, x + .25, y + .25 );
-            geometry = new THREE.ExtrudeGeometry(heartShape, { depth: 0.4, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.1, bevelSegments: 3 });
+            const x = 0,
+              y = 0;
+            heartShape.moveTo(x + 0.25, y + 0.25);
+            heartShape.bezierCurveTo(x + 0.25, y + 0.25, x + 0.2, y, x, y);
+            heartShape.bezierCurveTo(
+              x - 0.3,
+              y,
+              x - 0.3,
+              y + 0.35,
+              x - 0.3,
+              y + 0.35,
+            );
+            heartShape.bezierCurveTo(
+              x - 0.3,
+              y + 0.55,
+              x - 0.1,
+              y + 0.77,
+              x + 0.25,
+              y + 0.95,
+            );
+            heartShape.bezierCurveTo(
+              x + 0.6,
+              y + 0.77,
+              x + 0.8,
+              y + 0.55,
+              x + 0.8,
+              y + 0.35,
+            );
+            heartShape.bezierCurveTo(x + 0.8, y + 0.35, x + 0.8, y, x + 0.5, y);
+            heartShape.bezierCurveTo(
+              x + 0.35,
+              y,
+              x + 0.25,
+              y + 0.25,
+              x + 0.25,
+              y + 0.25,
+            );
+            geometry = new THREE.ExtrudeGeometry(heartShape, {
+              depth: 0.4,
+              bevelEnabled: true,
+              bevelThickness: 0.1,
+              bevelSize: 0.1,
+              bevelSegments: 3,
+            });
             // Scale and center heart
-            geometry.scale( 2.2, -2.2, 2.2 );
+            geometry.scale(2.2, -2.2, 2.2);
             geometry.center();
           }
           break;
-        case 'capsule':
-          geometry = new THREE.CapsuleGeometry(0.8, 1.2, 
-            Math.max(16, 16 * settings.shapeModifiers.detailLevel), 
-            Math.max(32, 32 * settings.shapeModifiers.detailLevel)
+        case "capsule":
+          geometry = new THREE.CapsuleGeometry(
+            0.8,
+            1.2,
+            Math.max(16, 16 * settings.shapeModifiers.detailLevel),
+            Math.max(32, 32 * settings.shapeModifiers.detailLevel),
           );
           break;
-        case 'ring':
-          geometry = new THREE.TorusGeometry(1.2, 0.15, 
-            Math.max(16, 16 * settings.shapeModifiers.detailLevel), 
-            Math.max(50, 20 * settings.shapeModifiers.detailLevel)
+        case "ring":
+          geometry = new THREE.TorusGeometry(
+            1.2,
+            0.15,
+            Math.max(16, 16 * settings.shapeModifiers.detailLevel),
+            Math.max(50, 20 * settings.shapeModifiers.detailLevel),
           );
           break;
-        case 'cross':
+        case "cross":
           {
             const crossShape = new THREE.Shape();
             const w = 0.4;
@@ -785,18 +905,24 @@ export default function CanvasViewport({
             crossShape.lineTo(-l, w);
             crossShape.lineTo(-w, w);
             crossShape.lineTo(-w, l);
-            geometry = new THREE.ExtrudeGeometry(crossShape, { 
-              depth: 0.5, 
-              bevelEnabled: true, 
-              bevelThickness: settings.shapeModifiers.bevelSize, 
-              bevelSize: settings.shapeModifiers.bevelSize, 
-              bevelSegments: Math.max(3, settings.shapeModifiers.detailLevel * 2),
-              curveSegments: Math.max(12, settings.shapeModifiers.detailLevel * 4) 
+            geometry = new THREE.ExtrudeGeometry(crossShape, {
+              depth: 0.5,
+              bevelEnabled: true,
+              bevelThickness: settings.shapeModifiers.bevelSize,
+              bevelSize: settings.shapeModifiers.bevelSize,
+              bevelSegments: Math.max(
+                3,
+                settings.shapeModifiers.detailLevel * 2,
+              ),
+              curveSegments: Math.max(
+                12,
+                settings.shapeModifiers.detailLevel * 4,
+              ),
             });
             geometry.center();
           }
           break;
-        case 'arrow':
+        case "arrow":
           {
             const arrowShape = new THREE.Shape();
             arrowShape.moveTo(0, 1.2);
@@ -807,424 +933,502 @@ export default function CanvasViewport({
             arrowShape.lineTo(-0.3, 0.2);
             arrowShape.lineTo(-0.8, 0.2);
             arrowShape.lineTo(0, 1.2);
-            geometry = new THREE.ExtrudeGeometry(arrowShape, { 
-              depth: 0.5, 
-              bevelEnabled: true, 
-              bevelThickness: settings.shapeModifiers.bevelSize, 
-              bevelSize: settings.shapeModifiers.bevelSize, 
-              bevelSegments: Math.max(3, settings.shapeModifiers.detailLevel * 2),
-              curveSegments: Math.max(12, settings.shapeModifiers.detailLevel * 4) 
+            geometry = new THREE.ExtrudeGeometry(arrowShape, {
+              depth: 0.5,
+              bevelEnabled: true,
+              bevelThickness: settings.shapeModifiers.bevelSize,
+              bevelSize: settings.shapeModifiers.bevelSize,
+              bevelSegments: Math.max(
+                3,
+                settings.shapeModifiers.detailLevel * 2,
+              ),
+              curveSegments: Math.max(
+                12,
+                settings.shapeModifiers.detailLevel * 4,
+              ),
             });
             geometry.center();
           }
           break;
-        case 'diamond':
+        case "diamond":
           geometry = new THREE.OctahedronGeometry(1.4, 0);
           geometry.scale(1, 1.4, 1);
           break;
-        case 'gem':
+        case "gem":
           geometry = new THREE.DodecahedronGeometry(1.4, 0);
           geometry.scale(1, 1.3, 1);
           break;
-        case 'sphere':
-          geometry = new THREE.SphereGeometry(1.3, 
-            Math.max(32, 16 * settings.shapeModifiers.detailLevel), 
-            Math.max(32, 16 * settings.shapeModifiers.detailLevel)
+        case "sphere":
+          geometry = new THREE.SphereGeometry(
+            1.3,
+            Math.max(32, 16 * settings.shapeModifiers.detailLevel),
+            Math.max(32, 16 * settings.shapeModifiers.detailLevel),
           );
           break;
-        case 'cube':
-        case 'box':
+        case "cube":
+        case "box":
           {
             const s = Math.max(1, settings.shapeModifiers.detailLevel * 3);
             geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5, s, s, s);
           }
           break;
-        case 'torus':
-          geometry = new THREE.TorusGeometry(1.0, 0.35, 
-            Math.max(16, 16 * settings.shapeModifiers.detailLevel), 
-            Math.max(50, 20 * settings.shapeModifiers.detailLevel)
+        case "torus":
+          geometry = new THREE.TorusGeometry(
+            1.0,
+            0.35,
+            Math.max(16, 16 * settings.shapeModifiers.detailLevel),
+            Math.max(50, 20 * settings.shapeModifiers.detailLevel),
           );
           break;
-        case 'icosahedron':
-          geometry = new THREE.IcosahedronGeometry(1.4, Math.max(0, settings.shapeModifiers.detailLevel - 1));
+        case "icosahedron":
+          geometry = new THREE.IcosahedronGeometry(
+            1.4,
+            Math.max(0, settings.shapeModifiers.detailLevel - 1),
+          );
           break;
-        case 'wavy-sphere': {
+        case "wavy-sphere": {
           isCompositeGroup = true;
           const wgeom = new THREE.SphereGeometry(1.2, 64, 64);
           const pos = wgeom.attributes.position;
-          for(let i=0; i<pos.count; i++) {
-             const x = pos.getX(i);
-             const y = pos.getY(i);
-             const z = pos.getZ(i);
-             const freq = 4.0 + settings.shapeModifiers.detailLevel;
-             const noise = 1 + 0.15 * Math.sin(x * freq) * Math.sin(y * freq) * Math.sin(z * freq);
-             pos.setXYZ(i, x * noise, y * noise, z * noise);
+          for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i);
+            const y = pos.getY(i);
+            const z = pos.getZ(i);
+            const freq = 4.0 + settings.shapeModifiers.detailLevel;
+            const noise =
+              1 +
+              0.15 *
+                Math.sin(x * freq) *
+                Math.sin(y * freq) *
+                Math.sin(z * freq);
+            pos.setXYZ(i, x * noise, y * noise, z * noise);
           }
           wgeom.computeVertexNormals();
           const baseMesh = new THREE.Mesh(wgeom, baseColorMaterial);
           compositeGroup.add(baseMesh);
-          
+
           if (overlayMaterial) {
-             const overlayMesh = new THREE.Mesh(wgeom, overlayMaterial);
-             overlayMesh.scale.set(1.02, 1.02, 1.02);
-             compositeGroup.add(overlayMesh);
+            const overlayMesh = new THREE.Mesh(wgeom, overlayMaterial);
+            overlayMesh.scale.set(1.02, 1.02, 1.02);
+            compositeGroup.add(overlayMesh);
           }
           break;
         }
-        case 'layered-sphere': {
+        case "layered-sphere": {
           isCompositeGroup = true;
           const numLayers = 3 + settings.shapeModifiers.detailLevel;
-          for(let i=0; i<numLayers; i++) {
-             const layerRadius = 0.5 + 0.8 * (i / (numLayers-1));
-             const rgeom = new THREE.SphereGeometry(layerRadius, 32, 32);
-             const mat = baseColorMaterial.clone();
-             mat.wireframe = (i % 2 !== 0);
-             mat.transparent = true;
-             mat.opacity = (i % 2 !== 0) ? 0.3 : 1.0;
-             const bmesh = new THREE.Mesh(rgeom, mat);
-             compositeGroup.add(bmesh);
+          for (let i = 0; i < numLayers; i++) {
+            const layerRadius = 0.5 + 0.8 * (i / (numLayers - 1));
+            const rgeom = new THREE.SphereGeometry(layerRadius, 32, 32);
+            const mat = baseColorMaterial.clone();
+            mat.wireframe = i % 2 !== 0;
+            mat.transparent = true;
+            mat.opacity = i % 2 !== 0 ? 0.3 : 1.0;
+            const bmesh = new THREE.Mesh(rgeom, mat);
+            compositeGroup.add(bmesh);
           }
           break;
         }
-        case 'molecular-sphere': {
+        case "molecular-sphere": {
           isCompositeGroup = true;
           const coreGeom = new THREE.IcosahedronGeometry(0.8, 1);
           const pos = coreGeom.attributes.position;
           const baseB = new THREE.Mesh(coreGeom, baseColorMaterial);
           compositeGroup.add(baseB);
-          
+
           const atomGeom = new THREE.SphereGeometry(0.15, 16, 16);
           const bondGeom = new THREE.CylinderGeometry(0.04, 0.04, 1, 8);
           bondGeom.translate(0, 0.5, 0);
-          bondGeom.rotateX(Math.PI/2);
-          
-          for(let i=0; i<pos.count; i++) {
-             const x = pos.getX(i);
-             const y = pos.getY(i);
-             const z = pos.getZ(i);
-             const vec = new THREE.Vector3(x,y,z).normalize();
-             const dist = 1.0 + Math.random() * 0.5;
-             const ax = vec.x * dist;
-             const ay = vec.y * dist;
-             const az = vec.z * dist;
-             
-             const aMesh = new THREE.Mesh(atomGeom, overlayMaterial || baseColorMaterial);
-             aMesh.position.set(ax, ay, az);
-             compositeGroup.add(aMesh);
-             
-             const bond = new THREE.Mesh(bondGeom, baseColorMaterial);
-             bond.position.set(vec.x * 0.8, vec.y * 0.8, vec.z * 0.8);
-             bond.lookAt(new THREE.Vector3(ax, ay, az));
-             bond.scale.z = (dist - 0.8);
-             compositeGroup.add(bond);
+          bondGeom.rotateX(Math.PI / 2);
+
+          for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i);
+            const y = pos.getY(i);
+            const z = pos.getZ(i);
+            const vec = new THREE.Vector3(x, y, z).normalize();
+            const dist = 1.0 + Math.random() * 0.5;
+            const ax = vec.x * dist;
+            const ay = vec.y * dist;
+            const az = vec.z * dist;
+
+            const aMesh = new THREE.Mesh(
+              atomGeom,
+              overlayMaterial || baseColorMaterial,
+            );
+            aMesh.position.set(ax, ay, az);
+            compositeGroup.add(aMesh);
+
+            const bond = new THREE.Mesh(bondGeom, baseColorMaterial);
+            bond.position.set(vec.x * 0.8, vec.y * 0.8, vec.z * 0.8);
+            bond.lookAt(new THREE.Vector3(ax, ay, az));
+            bond.scale.z = dist - 0.8;
+            compositeGroup.add(bond);
           }
           break;
         }
-        case '3d-jack': {
+        case "3d-jack": {
           isCompositeGroup = true;
           const cylGeom = new THREE.CylinderGeometry(0.25, 0.25, 2.4, 32);
           const capGeom = new THREE.SphereGeometry(0.35, 32, 32);
-          
+
           for (let i = 0; i < 3; i++) {
-             const mesh = new THREE.Mesh(cylGeom, baseColorMaterial);
-             const cap1 = new THREE.Mesh(capGeom, baseColorMaterial);
-             const cap2 = new THREE.Mesh(capGeom, baseColorMaterial);
-             cap1.position.y = 1.2;
-             cap2.position.y = -1.2;
-             mesh.add(cap1);
-             mesh.add(cap2);
-             
-             if (i === 1) mesh.rotation.x = Math.PI / 2;
-             if (i === 2) mesh.rotation.z = Math.PI / 2;
-             compositeGroup.add(mesh);
-             
-             if (overlayMaterial) {
-                const meshO = new THREE.Mesh(cylGeom, overlayMaterial);
-                meshO.scale.set(1.02, 1.02, 1.02);
-                const capO1 = new THREE.Mesh(capGeom, overlayMaterial);
-                const capO2 = new THREE.Mesh(capGeom, overlayMaterial);
-                capO1.position.y = 1.2;
-                capO2.position.y = -1.2;
-                capO1.scale.set(1.02, 1.02, 1.02);
-                capO2.scale.set(1.02, 1.02, 1.02);
-                meshO.add(capO1);
-                meshO.add(capO2);
-                if (i === 1) meshO.rotation.x = Math.PI / 2;
-                if (i === 2) meshO.rotation.z = Math.PI / 2;
-                compositeGroup.add(meshO);
-             }
+            const mesh = new THREE.Mesh(cylGeom, baseColorMaterial);
+            const cap1 = new THREE.Mesh(capGeom, baseColorMaterial);
+            const cap2 = new THREE.Mesh(capGeom, baseColorMaterial);
+            cap1.position.y = 1.2;
+            cap2.position.y = -1.2;
+            mesh.add(cap1);
+            mesh.add(cap2);
+
+            if (i === 1) mesh.rotation.x = Math.PI / 2;
+            if (i === 2) mesh.rotation.z = Math.PI / 2;
+            compositeGroup.add(mesh);
+
+            if (overlayMaterial) {
+              const meshO = new THREE.Mesh(cylGeom, overlayMaterial);
+              meshO.scale.set(1.02, 1.02, 1.02);
+              const capO1 = new THREE.Mesh(capGeom, overlayMaterial);
+              const capO2 = new THREE.Mesh(capGeom, overlayMaterial);
+              capO1.position.y = 1.2;
+              capO2.position.y = -1.2;
+              capO1.scale.set(1.02, 1.02, 1.02);
+              capO2.scale.set(1.02, 1.02, 1.02);
+              meshO.add(capO1);
+              meshO.add(capO2);
+              if (i === 1) meshO.rotation.x = Math.PI / 2;
+              if (i === 2) meshO.rotation.z = Math.PI / 2;
+              compositeGroup.add(meshO);
+            }
           }
           break;
         }
-        case 'wooden-puzzle': {
-           isCompositeGroup = true;
-           const wGeom = new THREE.BoxGeometry(0.4, 0.4, 2.5);
-           const bar1 = new THREE.Mesh(wGeom, baseColorMaterial);
-           const bar2 = new THREE.Mesh(wGeom, baseColorMaterial);
-           bar2.rotation.y = Math.PI / 2;
-           bar2.position.set(0, 0.2, 0);
-           const bar3 = new THREE.Mesh(wGeom, baseColorMaterial);
-           bar3.rotation.x = Math.PI / 2;
-           bar3.position.set(0.2, 0, 0);
-
-           [bar1, bar2, bar3].forEach((b, idx) => {
-               compositeGroup.add(b);
-               if (overlayMaterial) {
-                  const o = new THREE.Mesh(wGeom, overlayMaterial);
-                  o.position.copy(b.position);
-                  o.rotation.copy(b.rotation);
-                  o.scale.set(1.02, 1.02, 1.02);
-                  compositeGroup.add(o);
-               }
-           });
-           break;
-        }
-        case 'city-blocks': {
-           isCompositeGroup = true;
-           const gridSize = 5;
-           const blockSize = 0.35;
-           const spacing = 0.4;
-           const offset = (gridSize - 1) * spacing / 2;
-           const bGeom = new THREE.BoxGeometry(blockSize, 1, blockSize);
-           
-           const seedRand = (s: number) => {
-              const x = Math.sin(s) * 10000;
-              return x - Math.floor(x);
-           };
-
-           for(let x=0; x<gridSize; x++) {
-              for(let z=0; z<gridSize; z++) {
-                 const height = 0.4 + seedRand((x+1) * 10 + z) * 2.2;
-                 const bMesh = new THREE.Mesh(bGeom, baseColorMaterial);
-                 bMesh.scale.y = height;
-                 bMesh.position.set(x * spacing - offset, (height - 1) / 2, z * spacing - offset);
-                 compositeGroup.add(bMesh);
-                 
-                 if (overlayMaterial) {
-                    const o = new THREE.Mesh(bGeom, overlayMaterial);
-                    o.scale.set(1.02, height * 1.02, 1.02);
-                    o.position.copy(bMesh.position);
-                    compositeGroup.add(o);
-                 }
-              }
-           }
-           compositeGroup.position.y = -0.5;
-           break;
-        }
-        case 'puffy-cube': {
-           geometry = new THREE.BoxGeometry(1.6, 1.6, 1.6, 64, 64, 64);
-           const pos = geometry.attributes.position;
-           for(let i=0; i<pos.count; i++) {
-               const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
-               const s = v.clone().normalize().multiplyScalar(1.2);
-               v.lerp(s, 0.4);
-               
-               const ax = Math.abs(v.x), ay = Math.abs(v.y), az = Math.abs(v.z);
-               let cx = v.x, cy = v.y, cz = v.z;
-               if (ax > ay && ax > az) { cy *= 5; cz *= 5; }
-               else if (ay > ax && ay > az) { cx *= 5; cz *= 5; }
-               else { cx *= 5; cy *= 5; }
-               
-               const quilt = 0.05 * Math.sin(cx) * Math.sin(cy) * Math.sin(cz);
-               const finalV = v.add(v.clone().normalize().multiplyScalar(quilt));
-               pos.setXYZ(i, finalV.x, finalV.y, finalV.z);
-           }
-           geometry.computeVertexNormals();
-           break;
-        }
-        case 'gears': {
+        case "wooden-puzzle": {
           isCompositeGroup = true;
-          const makeGear = () => {
-             const gGroup = new THREE.Group();
-             const core = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.3, 32), baseColorMaterial);
-             const rim = new THREE.Mesh(new THREE.TorusGeometry(0.65, 0.15, 16, 64), baseColorMaterial);
-             rim.rotation.x = Math.PI/2;
-             gGroup.add(core);
-             gGroup.add(rim);
-             
-             if (overlayMaterial) {
-                 const coreO = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.3, 32), overlayMaterial);
-                 coreO.scale.set(1.02, 1.05, 1.02);
-                 const rimO = new THREE.Mesh(new THREE.TorusGeometry(0.65, 0.15, 16, 64), overlayMaterial);
-                 rimO.rotation.x = Math.PI/2;
-                 rimO.scale.set(1.02, 1.02, 1.02);
-                 gGroup.add(coreO);
-                 gGroup.add(rimO);
-             }
+          const wGeom = new THREE.BoxGeometry(0.4, 0.4, 2.5);
+          const bar1 = new THREE.Mesh(wGeom, baseColorMaterial);
+          const bar2 = new THREE.Mesh(wGeom, baseColorMaterial);
+          bar2.rotation.y = Math.PI / 2;
+          bar2.position.set(0, 0.2, 0);
+          const bar3 = new THREE.Mesh(wGeom, baseColorMaterial);
+          bar3.rotation.x = Math.PI / 2;
+          bar3.position.set(0.2, 0, 0);
 
-             const numTeeth = 16;
-             const toothGeom = new THREE.BoxGeometry(0.2, 0.3, 0.3);
-             for(let i=0; i<numTeeth; i++) {
-                const angle = (i/numTeeth) * Math.PI * 2;
-                const tooth = new THREE.Mesh(toothGeom, baseColorMaterial);
-                tooth.position.set(Math.cos(angle)*0.85, 0, Math.sin(angle)*0.85);
-                tooth.rotation.y = -angle;
-                gGroup.add(tooth);
-                
-                if (overlayMaterial) {
-                   const toothO = new THREE.Mesh(toothGeom, overlayMaterial);
-                   toothO.position.copy(tooth.position);
-                   toothO.rotation.copy(tooth.rotation);
-                   toothO.scale.set(1.05, 1.05, 1.05);
-                   gGroup.add(toothO);
-                }
-             }
-             return gGroup;
-          };
-          
-          const gear1 = makeGear();
-          gear1.position.set(-0.85, 0, 0);
-          
-          const gear2 = makeGear();
-          gear2.position.set(0.85, 0, 0);
-          gear2.rotation.y = (Math.PI / 16); 
-          
-          compositeGroup.add(gear1);
-          compositeGroup.add(gear2);
-          
-          compositeGroup.rotation.x = Math.PI/4;
-          compositeGroup.rotation.z = Math.PI/4;
+          [bar1, bar2, bar3].forEach((b, idx) => {
+            compositeGroup.add(b);
+            if (overlayMaterial) {
+              const o = new THREE.Mesh(wGeom, overlayMaterial);
+              o.position.copy(b.position);
+              o.rotation.copy(b.rotation);
+              o.scale.set(1.02, 1.02, 1.02);
+              compositeGroup.add(o);
+            }
+          });
           break;
         }
-        case 'crater-moon': {
-           geometry = new THREE.SphereGeometry(1.3, 128, 128);
-           const pos = geometry.attributes.position;
-           const craters: {p: THREE.Vector3, r: number}[] = [];
-           for(let i=0; i<25; i++) {
-               const r = 0.1 + Math.sin(i*123) * 0.3; // stable random
-               const p = new THREE.Vector3(
-                  Math.sin(i*11), Math.cos(i*23), Math.sin(i*37)
-               ).normalize().multiplyScalar(1.3);
-               craters.push({p, r: Math.abs(r)});
-           }
-           
-           for(let i=0; i<pos.count; i++) {
-              const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
-              let displace = 0;
-              for(const c of craters) {
-                 const d = v.distanceTo(c.p);
-                 if (d < c.r) {
-                    const dent = Math.cos((d / c.r) * Math.PI) * 0.5 + 0.5;
-                    displace -= dent * (c.r * 0.4);
-                 } else if (d < c.r * 1.5) {
-                    const rim = Math.sin(((d - c.r)/(c.r*0.5)) * Math.PI);
-                    displace += rim * (c.r * 0.1);
-                 }
+        case "city-blocks": {
+          isCompositeGroup = true;
+          const gridSize = 5;
+          const blockSize = 0.35;
+          const spacing = 0.4;
+          const offset = ((gridSize - 1) * spacing) / 2;
+          const bGeom = new THREE.BoxGeometry(blockSize, 1, blockSize);
+
+          const seedRand = (s: number) => {
+            const x = Math.sin(s) * 10000;
+            return x - Math.floor(x);
+          };
+
+          for (let x = 0; x < gridSize; x++) {
+            for (let z = 0; z < gridSize; z++) {
+              const height = 0.4 + seedRand((x + 1) * 10 + z) * 2.2;
+              const bMesh = new THREE.Mesh(bGeom, baseColorMaterial);
+              bMesh.scale.y = height;
+              bMesh.position.set(
+                x * spacing - offset,
+                (height - 1) / 2,
+                z * spacing - offset,
+              );
+              compositeGroup.add(bMesh);
+
+              if (overlayMaterial) {
+                const o = new THREE.Mesh(bGeom, overlayMaterial);
+                o.scale.set(1.02, height * 1.02, 1.02);
+                o.position.copy(bMesh.position);
+                compositeGroup.add(o);
               }
-              const noise = Math.sin(v.x*15)*Math.sin(v.y*15)*Math.sin(v.z*15)*0.015;
-              v.add(v.clone().normalize().multiplyScalar(displace + noise));
-              pos.setXYZ(i, v.x, v.y, v.z);
-           }
-           geometry.computeVertexNormals();
-           break;
+            }
+          }
+          compositeGroup.position.y = -0.5;
+          break;
         }
-        case 'hollow-dodeca': {
+        case "puffy-cube": {
+          geometry = new THREE.BoxGeometry(1.6, 1.6, 1.6, 64, 64, 64);
+          const pos = geometry.attributes.position;
+          for (let i = 0; i < pos.count; i++) {
+            const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
+            const s = v.clone().normalize().multiplyScalar(1.2);
+            v.lerp(s, 0.4);
+
+            const ax = Math.abs(v.x),
+              ay = Math.abs(v.y),
+              az = Math.abs(v.z);
+            let cx = v.x,
+              cy = v.y,
+              cz = v.z;
+            if (ax > ay && ax > az) {
+              cy *= 5;
+              cz *= 5;
+            } else if (ay > ax && ay > az) {
+              cx *= 5;
+              cz *= 5;
+            } else {
+              cx *= 5;
+              cy *= 5;
+            }
+
+            const quilt = 0.05 * Math.sin(cx) * Math.sin(cy) * Math.sin(cz);
+            const finalV = v.add(v.clone().normalize().multiplyScalar(quilt));
+            pos.setXYZ(i, finalV.x, finalV.y, finalV.z);
+          }
+          geometry.computeVertexNormals();
+          break;
+        }
+        case "gears": {
+          isCompositeGroup = true;
+          const makeGear = () => {
+            const gGroup = new THREE.Group();
+            const core = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.8, 0.8, 0.3, 32),
+              baseColorMaterial,
+            );
+            const rim = new THREE.Mesh(
+              new THREE.TorusGeometry(0.65, 0.15, 16, 64),
+              baseColorMaterial,
+            );
+            rim.rotation.x = Math.PI / 2;
+            gGroup.add(core);
+            gGroup.add(rim);
+
+            if (overlayMaterial) {
+              const coreO = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.8, 0.8, 0.3, 32),
+                overlayMaterial,
+              );
+              coreO.scale.set(1.02, 1.05, 1.02);
+              const rimO = new THREE.Mesh(
+                new THREE.TorusGeometry(0.65, 0.15, 16, 64),
+                overlayMaterial,
+              );
+              rimO.rotation.x = Math.PI / 2;
+              rimO.scale.set(1.02, 1.02, 1.02);
+              gGroup.add(coreO);
+              gGroup.add(rimO);
+            }
+
+            const numTeeth = 16;
+            const toothGeom = new THREE.BoxGeometry(0.2, 0.3, 0.3);
+            for (let i = 0; i < numTeeth; i++) {
+              const angle = (i / numTeeth) * Math.PI * 2;
+              const tooth = new THREE.Mesh(toothGeom, baseColorMaterial);
+              tooth.position.set(
+                Math.cos(angle) * 0.85,
+                0,
+                Math.sin(angle) * 0.85,
+              );
+              tooth.rotation.y = -angle;
+              gGroup.add(tooth);
+
+              if (overlayMaterial) {
+                const toothO = new THREE.Mesh(toothGeom, overlayMaterial);
+                toothO.position.copy(tooth.position);
+                toothO.rotation.copy(tooth.rotation);
+                toothO.scale.set(1.05, 1.05, 1.05);
+                gGroup.add(toothO);
+              }
+            }
+            return gGroup;
+          };
+
+          const gear1 = makeGear();
+          gear1.position.set(-0.85, 0, 0);
+
+          const gear2 = makeGear();
+          gear2.position.set(0.85, 0, 0);
+          gear2.rotation.y = Math.PI / 16;
+
+          compositeGroup.add(gear1);
+          compositeGroup.add(gear2);
+
+          compositeGroup.rotation.x = Math.PI / 4;
+          compositeGroup.rotation.z = Math.PI / 4;
+          break;
+        }
+        case "crater-moon": {
+          geometry = new THREE.SphereGeometry(1.3, 128, 128);
+          const pos = geometry.attributes.position;
+          const craters: { p: THREE.Vector3; r: number }[] = [];
+          for (let i = 0; i < 25; i++) {
+            const r = 0.1 + Math.sin(i * 123) * 0.3; // stable random
+            const p = new THREE.Vector3(
+              Math.sin(i * 11),
+              Math.cos(i * 23),
+              Math.sin(i * 37),
+            )
+              .normalize()
+              .multiplyScalar(1.3);
+            craters.push({ p, r: Math.abs(r) });
+          }
+
+          for (let i = 0; i < pos.count; i++) {
+            const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
+            let displace = 0;
+            for (const c of craters) {
+              const d = v.distanceTo(c.p);
+              if (d < c.r) {
+                const dent = Math.cos((d / c.r) * Math.PI) * 0.5 + 0.5;
+                displace -= dent * (c.r * 0.4);
+              } else if (d < c.r * 1.5) {
+                const rim = Math.sin(((d - c.r) / (c.r * 0.5)) * Math.PI);
+                displace += rim * (c.r * 0.1);
+              }
+            }
+            const noise =
+              Math.sin(v.x * 15) *
+              Math.sin(v.y * 15) *
+              Math.sin(v.z * 15) *
+              0.015;
+            v.add(
+              v
+                .clone()
+                .normalize()
+                .multiplyScalar(displace + noise),
+            );
+            pos.setXYZ(i, v.x, v.y, v.z);
+          }
+          geometry.computeVertexNormals();
+          break;
+        }
+        case "hollow-dodeca": {
           isCompositeGroup = true;
           const baseGeom = new THREE.IcosahedronGeometry(1.3, 1);
           const edges = new THREE.EdgesGeometry(baseGeom);
           const pos = edges.attributes.position;
           const tubeGeom = new THREE.CylinderGeometry(0.04, 0.04, 1, 6);
           tubeGeom.rotateX(Math.PI / 2);
-          for(let i=0; i<pos.count; i+=2) {
-             const v1 = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
-             const v2 = new THREE.Vector3(pos.getX(i+1), pos.getY(i+1), pos.getZ(i+1));
-             const len = v1.distanceTo(v2);
-             const mid = v1.clone().lerp(v2, 0.5);
-             const mesh = new THREE.Mesh(tubeGeom, baseColorMaterial);
-             mesh.position.copy(mid);
-             mesh.lookAt(v2);
-             mesh.scale.z = len;
-             compositeGroup.add(mesh);
-             
-             if (overlayMaterial) {
-                const mo = new THREE.Mesh(tubeGeom, overlayMaterial);
-                mo.position.copy(mid);
-                mo.lookAt(v2);
-                mo.scale.set(1.2, 1.2, len * 1.05);
-                compositeGroup.add(mo);
-             }
+          for (let i = 0; i < pos.count; i += 2) {
+            const v1 = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
+            const v2 = new THREE.Vector3(
+              pos.getX(i + 1),
+              pos.getY(i + 1),
+              pos.getZ(i + 1),
+            );
+            const len = v1.distanceTo(v2);
+            const mid = v1.clone().lerp(v2, 0.5);
+            const mesh = new THREE.Mesh(tubeGeom, baseColorMaterial);
+            mesh.position.copy(mid);
+            mesh.lookAt(v2);
+            mesh.scale.z = len;
+            compositeGroup.add(mesh);
+
+            if (overlayMaterial) {
+              const mo = new THREE.Mesh(tubeGeom, overlayMaterial);
+              mo.position.copy(mid);
+              mo.lookAt(v2);
+              mo.scale.set(1.2, 1.2, len * 1.05);
+              compositeGroup.add(mo);
+            }
           }
           break;
         }
-        case 'grooved-cube': {
-           isCompositeGroup = true;
-           const s = 0.44;
-           const g = new THREE.BoxGeometry(s, s, s);
-           for (let x of [-0.5, 0, 0.5]) {
-             for (let y of [-0.5, 0, 0.5]) {
-               for (let z of [-0.5, 0, 0.5]) {
-                  const m = new THREE.Mesh(g, baseColorMaterial);
-                  m.position.set(x * 1.1, y * 1.1, z * 1.1);
-                  compositeGroup.add(m);
-                  if (overlayMaterial) {
-                     const mo = new THREE.Mesh(g, overlayMaterial);
-                     mo.position.copy(m.position);
-                     mo.scale.set(1.05, 1.05, 1.05);
-                     compositeGroup.add(mo);
-                  }
-               }
-             }
-           }
-           break;
+        case "grooved-cube": {
+          isCompositeGroup = true;
+          const s = 0.44;
+          const g = new THREE.BoxGeometry(s, s, s);
+          for (let x of [-0.5, 0, 0.5]) {
+            for (let y of [-0.5, 0, 0.5]) {
+              for (let z of [-0.5, 0, 0.5]) {
+                const m = new THREE.Mesh(g, baseColorMaterial);
+                m.position.set(x * 1.1, y * 1.1, z * 1.1);
+                compositeGroup.add(m);
+                if (overlayMaterial) {
+                  const mo = new THREE.Mesh(g, overlayMaterial);
+                  mo.position.copy(m.position);
+                  mo.scale.set(1.05, 1.05, 1.05);
+                  compositeGroup.add(mo);
+                }
+              }
+            }
+          }
+          break;
         }
-        case 'knot-ring':
-          geometry = new THREE.TorusKnotGeometry(1, 0.4, 
-            Math.max(64, 30 * settings.shapeModifiers.detailLevel), 
-            Math.max(16, 8 * settings.shapeModifiers.detailLevel), 
-            2, 3
+        case "knot-ring":
+          geometry = new THREE.TorusKnotGeometry(
+            1,
+            0.4,
+            Math.max(64, 30 * settings.shapeModifiers.detailLevel),
+            Math.max(16, 8 * settings.shapeModifiers.detailLevel),
+            2,
+            3,
           );
           break;
-        case 'faceted-sphere':
-          geometry = new THREE.IcosahedronGeometry(1.4, Math.max(1, settings.shapeModifiers.detailLevel - 1));
+        case "faceted-sphere":
+          geometry = new THREE.IcosahedronGeometry(
+            1.4,
+            Math.max(1, settings.shapeModifiers.detailLevel - 1),
+          );
           break;
-        case 'exploding-cube': {
+        case "exploding-cube": {
           isCompositeGroup = true;
-          const numCubes = 150 + (settings.shapeModifiers.detailLevel * 20);
-          for(let i=0; i<numCubes; i++) {
-             const dist = 0.3 + Math.pow(Math.random(), 2) * 1.3;
-             const theta = Math.random() * Math.PI * 2;
-             const phi = Math.acos(2 * Math.random() - 1);
-             const x = dist * Math.sin(phi) * Math.cos(theta);
-             const y = dist * Math.sin(phi) * Math.sin(theta);
-             const z = dist * Math.cos(phi);
-             
-             const size = (0.05 + Math.random() * 0.25) * (1.8 - dist); // smaller further out
-             const geom = new THREE.BoxGeometry(size,size,size);
-             const baseB = new THREE.Mesh(geom, baseColorMaterial);
-             baseB.position.set(x,y,z);
-             baseB.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
-             compositeGroup.add(baseB);
-             
-             if (overlayMaterial) {
-               const overB = new THREE.Mesh(geom, overlayMaterial);
-               overB.position.set(x,y,z);
-               overB.rotation.copy(baseB.rotation);
-               overB.scale.set(1.05,1.05,1.05);
-               compositeGroup.add(overB);
-             }
+          const numCubes = 150 + settings.shapeModifiers.detailLevel * 20;
+          for (let i = 0; i < numCubes; i++) {
+            const dist = 0.3 + Math.pow(Math.random(), 2) * 1.3;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+            const x = dist * Math.sin(phi) * Math.cos(theta);
+            const y = dist * Math.sin(phi) * Math.sin(theta);
+            const z = dist * Math.cos(phi);
+
+            const size = (0.05 + Math.random() * 0.25) * (1.8 - dist); // smaller further out
+            const geom = new THREE.BoxGeometry(size, size, size);
+            const baseB = new THREE.Mesh(geom, baseColorMaterial);
+            baseB.position.set(x, y, z);
+            baseB.rotation.set(
+              Math.random() * Math.PI,
+              Math.random() * Math.PI,
+              Math.random() * Math.PI,
+            );
+            compositeGroup.add(baseB);
+
+            if (overlayMaterial) {
+              const overB = new THREE.Mesh(geom, overlayMaterial);
+              overB.position.set(x, y, z);
+              overB.rotation.copy(baseB.rotation);
+              overB.scale.set(1.05, 1.05, 1.05);
+              compositeGroup.add(overB);
+            }
           }
           break;
         }
-        case 'bubble-sphere': {
+        case "bubble-sphere": {
           isCompositeGroup = true;
-          const numBubbles = 100 + (settings.shapeModifiers.detailLevel * 30);
+          const numBubbles = 100 + settings.shapeModifiers.detailLevel * 30;
           const goldenRatio = (1 + Math.sqrt(5)) / 2;
           const radius = 1.1;
           const bubbleRad = 0.25 * (3 / settings.shapeModifiers.detailLevel); // scale bubbles based on count
           const bubbleGeom = new THREE.SphereGeometry(bubbleRad, 32, 32);
-          
+
           for (let i = 0; i < numBubbles; i++) {
             const z = 1 - (2 * i) / (numBubbles - 1);
             const r = Math.sqrt(1 - z * z);
-            const theta = 2 * Math.PI * i / goldenRatio;
-            
+            const theta = (2 * Math.PI * i) / goldenRatio;
+
             const x = r * Math.cos(theta);
             const y = r * Math.sin(theta);
-            
+
             const bBase = new THREE.Mesh(bubbleGeom, baseColorMaterial);
             bBase.position.set(x * radius, y * radius, z * radius);
             compositeGroup.add(bBase);
-            
+
             if (overlayMaterial) {
               const bOverlay = new THREE.Mesh(bubbleGeom, overlayMaterial);
               bOverlay.position.set(x * radius, y * radius, z * radius);
@@ -1235,75 +1439,102 @@ export default function CanvasViewport({
           }
           break;
         }
-        case 'sliced-sphere': {
+        case "sliced-sphere": {
           isCompositeGroup = true;
-          const numSlices = Math.max(5, settings.shapeModifiers.detailLevel * 2);
+          const numSlices = Math.max(
+            5,
+            settings.shapeModifiers.detailLevel * 2,
+          );
           const sphereRadius = 1.3;
-          const sliceThickness = (sphereRadius * 2) / numSlices * 0.5; // leaving gaps
+          const sliceThickness = ((sphereRadius * 2) / numSlices) * 0.5; // leaving gaps
           for (let i = 0; i < numSlices; i++) {
-             const y = -sphereRadius + (i + 0.5) * ((sphereRadius * 2) / numSlices);
-             const sliceRadius = Math.sqrt(sphereRadius * sphereRadius - y * y);
-             if (sliceRadius > 0.01) {
-                const geom = new THREE.CylinderGeometry(sliceRadius, sliceRadius, sliceThickness, 64);
-                const bBase = new THREE.Mesh(geom, baseColorMaterial);
-                bBase.position.y = y;
-                compositeGroup.add(bBase);
+            const y =
+              -sphereRadius + (i + 0.5) * ((sphereRadius * 2) / numSlices);
+            const sliceRadius = Math.sqrt(sphereRadius * sphereRadius - y * y);
+            if (sliceRadius > 0.01) {
+              const geom = new THREE.CylinderGeometry(
+                sliceRadius,
+                sliceRadius,
+                sliceThickness,
+                64,
+              );
+              const bBase = new THREE.Mesh(geom, baseColorMaterial);
+              bBase.position.y = y;
+              compositeGroup.add(bBase);
 
-                if (overlayMaterial) {
-                   const overB = new THREE.Mesh(geom, overlayMaterial);
-                   overB.position.y = y;
-                   overB.scale.set(1.02, 1.05, 1.02);
-                   compositeGroup.add(overB);
-                }
-             }
+              if (overlayMaterial) {
+                const overB = new THREE.Mesh(geom, overlayMaterial);
+                overB.position.y = y;
+                overB.scale.set(1.02, 1.05, 1.02);
+                compositeGroup.add(overB);
+              }
+            }
           }
           break;
         }
-        case 'particle-cloud': {
+        case "particle-cloud": {
           isCompositeGroup = true;
-          const numParticles = 300 + (settings.shapeModifiers.detailLevel * 100);
+          const numParticles = 300 + settings.shapeModifiers.detailLevel * 100;
           const radius = 1.5;
           const particleGeom = new THREE.BoxGeometry(0.05, 0.05, 0.05);
           for (let i = 0; i < numParticles; i++) {
-             const u = Math.random();
-             const v = Math.random();
-             const theta = u * 2.0 * Math.PI;
-             const phi = Math.acos(2.0 * v - 1.0);
-             const r = Math.cbrt(Math.random()) * radius;
-             const x = r * Math.sin(phi) * Math.cos(theta);
-             const y = r * Math.sin(phi) * Math.sin(theta);
-             const z = r * Math.cos(phi);
+            const u = Math.random();
+            const v = Math.random();
+            const theta = u * 2.0 * Math.PI;
+            const phi = Math.acos(2.0 * v - 1.0);
+            const r = Math.cbrt(Math.random()) * radius;
+            const x = r * Math.sin(phi) * Math.cos(theta);
+            const y = r * Math.sin(phi) * Math.sin(theta);
+            const z = r * Math.cos(phi);
 
-             const pBase = new THREE.Mesh(particleGeom, baseColorMaterial);
-             pBase.position.set(x, y, z);
-             pBase.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
-             compositeGroup.add(pBase);
+            const pBase = new THREE.Mesh(particleGeom, baseColorMaterial);
+            pBase.position.set(x, y, z);
+            pBase.rotation.set(
+              Math.random() * Math.PI,
+              Math.random() * Math.PI,
+              Math.random() * Math.PI,
+            );
+            compositeGroup.add(pBase);
           }
           break;
         }
-        case 'cylinder':
-          geometry = new THREE.CylinderGeometry(0.8, 0.8, 2.0, 
-            Math.max(16, 8 * settings.shapeModifiers.detailLevel), 
-            Math.max(1, settings.shapeModifiers.detailLevel * 4)
+        case "cylinder":
+          geometry = new THREE.CylinderGeometry(
+            0.8,
+            0.8,
+            2.0,
+            Math.max(16, 8 * settings.shapeModifiers.detailLevel),
+            Math.max(1, settings.shapeModifiers.detailLevel * 4),
           );
           break;
-        case 'octahedron':
-          geometry = new THREE.OctahedronGeometry(1.5, Math.max(0, settings.shapeModifiers.detailLevel - 1));
-          break;
-        case 'cone':
-          geometry = new THREE.ConeGeometry(1.0, 2.0, 
-             Math.max(16, 8 * settings.shapeModifiers.detailLevel),
-             Math.max(1, settings.shapeModifiers.detailLevel * 4)
+        case "octahedron":
+          geometry = new THREE.OctahedronGeometry(
+            1.5,
+            Math.max(0, settings.shapeModifiers.detailLevel - 1),
           );
           break;
-        case 'dodecahedron':
-          geometry = new THREE.DodecahedronGeometry(1.3, Math.max(0, settings.shapeModifiers.detailLevel - 1));
+        case "cone":
+          geometry = new THREE.ConeGeometry(
+            1.0,
+            2.0,
+            Math.max(16, 8 * settings.shapeModifiers.detailLevel),
+            Math.max(1, settings.shapeModifiers.detailLevel * 4),
+          );
           break;
-        case 'tetrahedron':
-          geometry = new THREE.TetrahedronGeometry(1.5, Math.max(0, settings.shapeModifiers.detailLevel - 1));
+        case "dodecahedron":
+          geometry = new THREE.DodecahedronGeometry(
+            1.3,
+            Math.max(0, settings.shapeModifiers.detailLevel - 1),
+          );
           break;
-        case 'sunCoin':
-        case 'sun_coin': {
+        case "tetrahedron":
+          geometry = new THREE.TetrahedronGeometry(
+            1.5,
+            Math.max(0, settings.shapeModifiers.detailLevel - 1),
+          );
+          break;
+        case "sunCoin":
+        case "sun_coin": {
           isCompositeGroup = true;
           const coinGeom = new THREE.CylinderGeometry(1.2, 1.2, 0.18, 64);
           const coinBaseMesh = new THREE.Mesh(coinGeom, baseColorMaterial);
@@ -1311,12 +1542,18 @@ export default function CanvasViewport({
           compositeGroup.add(coinBaseMesh);
 
           if (overlayMaterial) {
-            const frontOverlay = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64), overlayMaterial);
+            const frontOverlay = new THREE.Mesh(
+              new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64),
+              overlayMaterial,
+            );
             frontOverlay.rotation.x = Math.PI / 2;
             frontOverlay.position.z = 0.091;
             compositeGroup.add(frontOverlay);
 
-            const backOverlay = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64), overlayMaterial);
+            const backOverlay = new THREE.Mesh(
+              new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64),
+              overlayMaterial,
+            );
             backOverlay.rotation.x = Math.PI / 2;
             backOverlay.position.z = -0.091;
             compositeGroup.add(backOverlay);
@@ -1343,18 +1580,26 @@ export default function CanvasViewport({
             const rayGeom = new THREE.ConeGeometry(0.08, 0.45, 4);
             const rayMesh = new THREE.Mesh(rayGeom, rimDetailMaterial);
             rayMesh.rotation.z = angle - Math.PI / 2;
-            rayMesh.position.set(Math.cos(angle) * 0.6, Math.sin(angle) * 0.6, 0.1);
+            rayMesh.position.set(
+              Math.cos(angle) * 0.6,
+              Math.sin(angle) * 0.6,
+              0.1,
+            );
             compositeGroup.add(rayMesh);
 
             const backRayMesh = new THREE.Mesh(rayGeom, rimDetailMaterial);
             backRayMesh.rotation.z = angle - Math.PI / 2;
-            backRayMesh.position.set(Math.cos(angle) * 0.6, Math.sin(angle) * 0.6, -0.1);
+            backRayMesh.position.set(
+              Math.cos(angle) * 0.6,
+              Math.sin(angle) * 0.6,
+              -0.1,
+            );
             compositeGroup.add(backRayMesh);
           }
           break;
         }
-        case 'lotusCoin':
-        case 'lotus_coin': {
+        case "lotusCoin":
+        case "lotus_coin": {
           isCompositeGroup = true;
           const coinGeom = new THREE.CylinderGeometry(1.2, 1.2, 0.18, 64);
           const coinBaseMesh = new THREE.Mesh(coinGeom, baseColorMaterial);
@@ -1362,12 +1607,18 @@ export default function CanvasViewport({
           compositeGroup.add(coinBaseMesh);
 
           if (overlayMaterial) {
-            const frontOverlay = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64), overlayMaterial);
+            const frontOverlay = new THREE.Mesh(
+              new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64),
+              overlayMaterial,
+            );
             frontOverlay.rotation.x = Math.PI / 2;
             frontOverlay.position.z = 0.091;
             compositeGroup.add(frontOverlay);
 
-            const backOverlay = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64), overlayMaterial);
+            const backOverlay = new THREE.Mesh(
+              new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64),
+              overlayMaterial,
+            );
             backOverlay.rotation.x = Math.PI / 2;
             backOverlay.position.z = -0.091;
             compositeGroup.add(backOverlay);
@@ -1392,7 +1643,11 @@ export default function CanvasViewport({
             petalMesh.rotation.z = angle;
             petalMesh.rotation.x = 0.15 * Math.sin(angle);
             petalMesh.rotation.y = -0.15 * Math.cos(angle);
-            petalMesh.position.set(Math.cos(angle) * 0.38, Math.sin(angle) * 0.38, 0.1);
+            petalMesh.position.set(
+              Math.cos(angle) * 0.38,
+              Math.sin(angle) * 0.38,
+              0.1,
+            );
             compositeGroup.add(petalMesh);
 
             const petalMeshBack = new THREE.Mesh(petalGeom, rimDetailMaterial);
@@ -1400,19 +1655,31 @@ export default function CanvasViewport({
             petalMeshBack.rotation.z = angle;
             petalMeshBack.rotation.x = -0.15 * Math.sin(angle);
             petalMeshBack.rotation.y = 0.15 * Math.cos(angle);
-            petalMeshBack.position.set(Math.cos(angle) * 0.38, Math.sin(angle) * 0.38, -0.1);
+            petalMeshBack.position.set(
+              Math.cos(angle) * 0.38,
+              Math.sin(angle) * 0.38,
+              -0.1,
+            );
             compositeGroup.add(petalMeshBack);
           }
 
-          const centerGeom = new THREE.SphereGeometry(0.2, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+          const centerGeom = new THREE.SphereGeometry(
+            0.2,
+            16,
+            16,
+            0,
+            Math.PI * 2,
+            0,
+            Math.PI / 2,
+          );
           const centerMesh = new THREE.Mesh(centerGeom, rimDetailMaterial);
           centerMesh.rotation.x = Math.PI / 2;
           centerMesh.position.z = 0.15;
           compositeGroup.add(centerMesh);
           break;
         }
-        case 'arrowTarget':
-        case 'arrow_target': {
+        case "arrowTarget":
+        case "arrow_target": {
           isCompositeGroup = true;
           const targetGeom = new THREE.CylinderGeometry(1.2, 1.2, 0.15, 64);
           const baseBoard = new THREE.Mesh(targetGeom, baseColorMaterial);
@@ -1420,12 +1687,18 @@ export default function CanvasViewport({
           compositeGroup.add(baseBoard);
 
           if (overlayMaterial) {
-            const frontOverlay = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.15, 0.002, 64), overlayMaterial);
+            const frontOverlay = new THREE.Mesh(
+              new THREE.CylinderGeometry(1.15, 1.15, 0.002, 64),
+              overlayMaterial,
+            );
             frontOverlay.rotation.x = Math.PI / 2;
             frontOverlay.position.z = 0.076;
             compositeGroup.add(frontOverlay);
 
-            const backOverlay = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.15, 0.002, 64), overlayMaterial);
+            const backOverlay = new THREE.Mesh(
+              new THREE.CylinderGeometry(1.15, 1.15, 0.002, 64),
+              overlayMaterial,
+            );
             backOverlay.rotation.x = Math.PI / 2;
             backOverlay.position.z = -0.076;
             compositeGroup.add(backOverlay);
@@ -1470,7 +1743,7 @@ export default function CanvasViewport({
             fMesh.position.set(
               -0.7 + Math.cos(fAngle) * 0.05,
               0.7 + Math.sin(fAngle) * 0.05,
-              0.9
+              0.9,
             );
             fMesh.rotation.x = -Math.PI / 4;
             fMesh.rotation.y = Math.PI / 6;
@@ -1479,8 +1752,8 @@ export default function CanvasViewport({
           }
           break;
         }
-        case 'dollarCoin':
-        case 'dollar_coin': {
+        case "dollarCoin":
+        case "dollar_coin": {
           isCompositeGroup = true;
           const coinGeom = new THREE.CylinderGeometry(1.2, 1.2, 0.18, 64);
           const coinBaseMesh = new THREE.Mesh(coinGeom, baseColorMaterial);
@@ -1488,12 +1761,18 @@ export default function CanvasViewport({
           compositeGroup.add(coinBaseMesh);
 
           if (overlayMaterial) {
-            const frontOverlay = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64), overlayMaterial);
+            const frontOverlay = new THREE.Mesh(
+              new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64),
+              overlayMaterial,
+            );
             frontOverlay.rotation.x = Math.PI / 2;
             frontOverlay.position.z = 0.091;
             compositeGroup.add(frontOverlay);
 
-            const backOverlay = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64), overlayMaterial);
+            const backOverlay = new THREE.Mesh(
+              new THREE.CylinderGeometry(1.1, 1.1, 0.002, 64),
+              overlayMaterial,
+            );
             backOverlay.rotation.x = Math.PI / 2;
             backOverlay.position.z = -0.091;
             compositeGroup.add(backOverlay);
@@ -1520,14 +1799,29 @@ export default function CanvasViewport({
             const archRad = 0.25;
             const archTub = 0.052;
 
-            const topLoopGeom = new THREE.TorusGeometry(archRad, archTub, 16, 32, Math.PI * 1.5 + 0.1);
+            const topLoopGeom = new THREE.TorusGeometry(
+              archRad,
+              archTub,
+              16,
+              32,
+              Math.PI * 1.5 + 0.1,
+            );
             const topLoop = new THREE.Mesh(topLoopGeom, rimDetailMaterial);
             topLoop.position.set(-0.06, 0.25, zOff);
             topLoop.rotation.z = -Math.PI / 4;
             logoGroup.add(topLoop);
 
-            const bottomLoopGeom = new THREE.TorusGeometry(archRad, archTub, 16, 32, Math.PI * 1.5 + 0.1);
-            const bottomLoop = new THREE.Mesh(bottomLoopGeom, rimDetailMaterial);
+            const bottomLoopGeom = new THREE.TorusGeometry(
+              archRad,
+              archTub,
+              16,
+              32,
+              Math.PI * 1.5 + 0.1,
+            );
+            const bottomLoop = new THREE.Mesh(
+              bottomLoopGeom,
+              rimDetailMaterial,
+            );
             bottomLoop.position.set(0.06, -0.25, zOff);
             bottomLoop.rotation.z = Math.PI * 0.75;
             logoGroup.add(bottomLoop);
@@ -1539,11 +1833,13 @@ export default function CanvasViewport({
           compositeGroup.add(createDollarLogo(false));
           break;
         }
-        case 'torusKnot':
+        case "torusKnot":
         default:
-          geometry = new THREE.TorusKnotGeometry(0.85, 0.28, 
-            Math.max(64, 30 * settings.shapeModifiers.detailLevel), 
-            Math.max(8, 6 * settings.shapeModifiers.detailLevel)
+          geometry = new THREE.TorusKnotGeometry(
+            0.85,
+            0.28,
+            Math.max(64, 30 * settings.shapeModifiers.detailLevel),
+            Math.max(8, 6 * settings.shapeModifiers.detailLevel),
           );
           break;
       }
@@ -1556,8 +1852,8 @@ export default function CanvasViewport({
             const mesh = child as THREE.Mesh;
             // Ensure we aren't modifying a shared geometry among multiple instances
             if (mesh.geometry) {
-               mesh.geometry = mesh.geometry.clone(); 
-               applyShapeModifiers(mesh.geometry);
+              mesh.geometry = mesh.geometry.clone();
+              applyShapeModifiers(mesh.geometry);
             }
           }
         });
@@ -1569,17 +1865,20 @@ export default function CanvasViewport({
       } else if (geometry) {
         const shapeGroup = new THREE.Group();
         const mods = settings.shapeModifiers;
-        
+
         let shouldRenderBaseMesh = true;
 
         if (mods.innerCoreSize > 0) {
           const coreGeom = new THREE.SphereGeometry(mods.innerCoreSize, 64, 64);
           const coreMesh = new THREE.Mesh(coreGeom, baseColorMaterial);
           shapeGroup.add(coreMesh);
-          
+
           // If inner core is active, user likely wants the base to be transparent or wireframe
-          if (settings.material.surface === 'solid' && mods.wireframeOpacity > 0.5) {
-             shouldRenderBaseMesh = false; // Hide base solid so we can see the core and wireframe shell
+          if (
+            settings.material.surface === "solid" &&
+            mods.wireframeOpacity > 0.5
+          ) {
+            shouldRenderBaseMesh = false; // Hide base solid so we can see the core and wireframe shell
           }
         }
 
@@ -1597,11 +1896,11 @@ export default function CanvasViewport({
 
         if (mods.wireframeOpacity > 0) {
           const wireGeom = new THREE.WireframeGeometry(geometry);
-          const wireMat = new THREE.LineBasicMaterial({ 
+          const wireMat = new THREE.LineBasicMaterial({
             color: new THREE.Color(0xffffff),
             transparent: true,
             opacity: mods.wireframeOpacity,
-            depthTest: true
+            depthTest: true,
           });
           const wireMesh = new THREE.LineSegments(wireGeom, wireMat);
           shapeGroup.add(wireMesh);
@@ -1611,24 +1910,28 @@ export default function CanvasViewport({
           const pos = geometry.attributes.position;
           const uniquePositions: THREE.Vector3[] = [];
           const setKeys = new Set<string>();
-          for(let i = 0; i < pos.count; i++) {
-             const x = pos.getX(i);
-             const y = pos.getY(i);
-             const z = pos.getZ(i);
-             const k = `${x.toFixed(3)}_${y.toFixed(3)}_${z.toFixed(3)}`;
-             if(!setKeys.has(k)) {
-                setKeys.add(k);
-                uniquePositions.push(new THREE.Vector3(x, y, z));
-             }
+          for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i);
+            const y = pos.getY(i);
+            const z = pos.getZ(i);
+            const k = `${x.toFixed(3)}_${y.toFixed(3)}_${z.toFixed(3)}`;
+            if (!setKeys.has(k)) {
+              setKeys.add(k);
+              uniquePositions.push(new THREE.Vector3(x, y, z));
+            }
           }
-          
+
           const nodeGeom = new THREE.SphereGeometry(mods.vertexNodes, 16, 16);
-          const instancedNodes = new THREE.InstancedMesh(nodeGeom, latticeMaterial, uniquePositions.length);
+          const instancedNodes = new THREE.InstancedMesh(
+            nodeGeom,
+            latticeMaterial,
+            uniquePositions.length,
+          );
           const dummy = new THREE.Object3D();
           uniquePositions.forEach((p, i) => {
-             dummy.position.copy(p);
-             dummy.updateMatrix();
-             instancedNodes.setMatrixAt(i, dummy.matrix);
+            dummy.position.copy(p);
+            dummy.updateMatrix();
+            instancedNodes.setMatrixAt(i, dummy.matrix);
           });
           shapeGroup.add(instancedNodes);
         }
@@ -1636,42 +1939,53 @@ export default function CanvasViewport({
         if (overlayMaterial && shouldRenderBaseMesh) {
           const overlayMesh = new THREE.Mesh(geometry, overlayMaterial);
           let scaleMultiplier = 1.003;
-          if (shapeKey === 'torus') scaleMultiplier = 1.006;
-          if (shapeKey === 'torusKnot') scaleMultiplier = 1.005;
-          if (shapeKey === 'sphere') scaleMultiplier = 1.002;
+          if (shapeKey === "torus") scaleMultiplier = 1.006;
+          if (shapeKey === "torusKnot") scaleMultiplier = 1.005;
+          if (shapeKey === "sphere") scaleMultiplier = 1.002;
 
-          overlayMesh.scale.set(scaleMultiplier, scaleMultiplier, scaleMultiplier);
+          overlayMesh.scale.set(
+            scaleMultiplier,
+            scaleMultiplier,
+            scaleMultiplier,
+          );
           shapeGroup.add(overlayMesh);
         }
         activeMesh = shapeGroup;
       }
-    } 
-    else if (sourceMode === 'text') {
-      const canvas = document.createElement('canvas');
+    } else if (sourceMode === "text") {
+      const canvas = document.createElement("canvas");
       canvas.width = 1024;
       canvas.height = 512;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = '#ffffff'; 
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        
-        const fontWeight = fontBold ? 'bold' : 'normal';
-        ctx.font = `${fontWeight} ${settings.fontSize * 1.8}px ${settings.fontFamily ?? 'Inter'}, sans-serif`;
-        
-        ctx.fillText(textStr.toUpperCase(), canvas.width / 2, canvas.height / 2);
-        
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        const fontWeight = fontBold ? "bold" : "normal";
+        ctx.font = `${fontWeight} ${settings.fontSize * 1.8}px ${settings.fontFamily ?? "Inter"}, sans-serif`;
+
+        ctx.fillText(
+          textStr.toUpperCase(),
+          canvas.width / 2,
+          canvas.height / 2,
+        );
+
+        ctx.fillStyle = "#ffffff";
         ctx.font = `400 24px monospace`;
-        ctx.fillText('H A L F T O N E', canvas.width / 2, canvas.height / 2 + 100);
+        ctx.fillText(
+          "H A L F T O N E",
+          canvas.width / 2,
+          canvas.height / 2 + 100,
+        );
       }
 
       const texture = new THREE.CanvasTexture(canvas);
       texture.minFilter = THREE.LinearFilter;
       const geometry = new THREE.PlaneGeometry(3.6, 1.8);
-      
+
       const textGroup = new THREE.Group();
 
       const textBaseParams: any = {
@@ -1685,13 +1999,13 @@ export default function CanvasViewport({
         side: THREE.DoubleSide,
         depthWrite: false,
       };
-      if (settings.material.surface === 'glass') {
+      if (settings.material.surface === "glass") {
         textBaseParams.transmission = 0.65;
         textBaseParams.ior = settings.material.refraction;
         textBaseParams.thickness = settings.material.thickness / 100.0;
         textBaseParams.clearcoat = 1.0;
         textBaseParams.clearcoatRoughness = 0.05;
-      } else if (settings.material.surface === 'solid') {
+      } else if (settings.material.surface === "solid") {
         textBaseParams.clearcoat = 0.4;
         textBaseParams.clearcoatRoughness = 0.1;
       }
@@ -1702,7 +2016,7 @@ export default function CanvasViewport({
       if (overlayMaterial) {
         const textOverlayParams: any = {
           map: loadedTexture,
-          color: new THREE.Color('#ffffff'),
+          color: new THREE.Color("#ffffff"),
           roughness: settings.material.roughness,
           metalness: settings.material.metalness,
           envMapIntensity: settings.material.environmentPower,
@@ -1712,38 +2026,39 @@ export default function CanvasViewport({
           side: THREE.DoubleSide,
           depthWrite: false,
         };
-        if (settings.material.surface === 'glass') {
+        if (settings.material.surface === "glass") {
           textOverlayParams.transmission = 0.35;
           textOverlayParams.ior = settings.material.refraction;
           textOverlayParams.thickness = settings.material.thickness / 100.0;
           textOverlayParams.clearcoat = 1.0;
           textOverlayParams.clearcoatRoughness = 0.05;
-        } else if (settings.material.surface === 'solid') {
+        } else if (settings.material.surface === "solid") {
           textOverlayParams.clearcoat = 0.4;
           textOverlayParams.clearcoatRoughness = 0.1;
         }
-        const textOverlayMaterial = new THREE.MeshPhysicalMaterial(textOverlayParams);
+        const textOverlayMaterial = new THREE.MeshPhysicalMaterial(
+          textOverlayParams,
+        );
         const overlayMesh = new THREE.Mesh(geometry, textOverlayMaterial);
         overlayMesh.position.z = 0.003;
         textGroup.add(overlayMesh);
       }
 
       activeMesh = textGroup;
-    } 
-    else if (sourceMode === 'image') {
+    } else if (sourceMode === "image") {
       const renderPlaceholder = () => {
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         canvas.width = 512;
         canvas.height = 512;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.clearRect(0, 0, 512, 512);
 
           const grad = ctx.createRadialGradient(256, 256, 50, 256, 256, 240);
-          grad.addColorStop(0, '#ffffff');
-          grad.addColorStop(0.3, '#bbbbbb');
-          grad.addColorStop(0.6, '#555555');
-          grad.addColorStop(1, '#000000');
+          grad.addColorStop(0, "#ffffff");
+          grad.addColorStop(0.3, "#bbbbbb");
+          grad.addColorStop(0.6, "#555555");
+          grad.addColorStop(1, "#000000");
           ctx.fillStyle = grad;
           ctx.beginPath();
           ctx.arc(256, 256, 220, 0, Math.PI * 2);
@@ -1757,7 +2072,7 @@ export default function CanvasViewport({
 
       const imgMaterial = new THREE.ShaderMaterial({
         uniforms: {
-          uTexture: { value: finalTex }
+          uTexture: { value: finalTex },
         },
         vertexShader: `
           varying vec2 vUv;
@@ -1775,7 +2090,7 @@ export default function CanvasViewport({
           }
         `,
         transparent: true,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
       });
 
       const mesh = new THREE.Mesh(geometry, imgMaterial);
@@ -1791,7 +2106,7 @@ export default function CanvasViewport({
           if (subChild.geometry) subChild.geometry.dispose();
           if (subChild.material) {
             if (Array.isArray(subChild.material)) {
-              subChild.material.forEach((m) => m.dispose());
+              subChild.material.forEach((m: THREE.Material) => m.dispose());
             } else {
               subChild.material.dispose();
             }
@@ -1804,14 +2119,20 @@ export default function CanvasViewport({
         currentMeshRef.current = activeMesh;
         meshGroupRef.current.add(activeMesh);
       }
-      
+
       setLoading(false);
     }
   };
 
   // Keep geometry inputs updated
   useEffect(() => {
-    updateGeometry(settings.shapeKey, settings.sourceMode, settings.textString, settings.imageSrc, settings.fontBold);
+    updateGeometry(
+      settings.shapeKey,
+      settings.sourceMode,
+      settings.textString,
+      settings.imageSrc,
+      settings.fontBold,
+    );
   }, [
     settings.shapeKey,
     settings.sourceMode,
@@ -1833,21 +2154,21 @@ export default function CanvasViewport({
     settings.shapeModifiers.bevelSize,
     settings.shapeModifiers.vertexNodes,
     settings.shapeModifiers.wireframeOpacity,
-    settings.shapeModifiers.innerCoreSize
+    settings.shapeModifiers.innerCoreSize,
   ]);
 
   // Synchronize background settings
   useEffect(() => {
     if (rendererRef.current) {
-        // ALWAYS transparent clear color for the renderer canvas itself to isolate 3D.
-        rendererRef.current.setClearColor(0x000000, 0);
-        
-        // Use mainScene background for app UI
-        if (mainSceneRef.current) {
-            mainSceneRef.current.background = settings.background.transparent 
-                ? null 
-                : new THREE.Color(settings.background.color);
-        }
+      // ALWAYS transparent clear color for the renderer canvas itself to isolate 3D.
+      rendererRef.current.setClearColor(0x000000, 0);
+
+      // Use mainScene background for app UI
+      if (mainSceneRef.current) {
+        mainSceneRef.current.background = settings.background.transparent
+          ? null
+          : new THREE.Color(settings.background.color);
+      }
     }
   }, [settings.background.transparent, settings.background.color]);
 
@@ -1877,32 +2198,32 @@ export default function CanvasViewport({
       const pmremGenerator = new THREE.PMREMGenerator(webGlRenderer);
       pmremGenerator.compileEquirectangularShader();
 
-      const canvas = document.createElement('canvas');
+      const canvas = document.createElement("canvas");
       canvas.width = 512;
       canvas.height = 256;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext("2d");
       if (ctx) {
         // Deep cosmic ambient gradient with vibrant reflection spots
         const grad = ctx.createLinearGradient(0, 0, 0, 256);
-        grad.addColorStop(0, '#555562');
-        grad.addColorStop(0.5, '#1e1e24');
-        grad.addColorStop(1, '#050508');
+        grad.addColorStop(0, "#555562");
+        grad.addColorStop(0.5, "#1e1e24");
+        grad.addColorStop(1, "#050508");
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, 512, 256);
 
         // Bright studio spotlights that reflect gorgeous shiny dots
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = "#ffffff";
         ctx.beginPath();
         ctx.arc(160, 70, 55, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = '#ececff';
+        ctx.fillStyle = "#ececff";
         ctx.beginPath();
         ctx.arc(380, 110, 40, 0, Math.PI * 2);
         ctx.fill();
 
         // Secondary soft highlights
-        ctx.fillStyle = '#dddfff';
+        ctx.fillStyle = "#dddfff";
         ctx.beginPath();
         ctx.arc(260, 190, 75, 0, Math.PI * 2);
         ctx.fill();
@@ -1936,15 +2257,24 @@ export default function CanvasViewport({
     meshGroup.rotation.set(0.3, 0.4, 0);
 
     // Setup basic studio lighting that will map to smooth halftone contrast gradient
-    const ambientLight = new THREE.AmbientLight(0xffffff, settings.lighting.ambientIntensity);
+    const ambientLight = new THREE.AmbientLight(
+      0xffffff,
+      settings.lighting.ambientIntensity,
+    );
     mainScene.add(ambientLight);
     ambientLightRef.current = ambientLight;
 
-    const primaryLight = new THREE.DirectionalLight(0xffffff, settings.lighting.intensity);
+    const primaryLight = new THREE.DirectionalLight(
+      0xffffff,
+      settings.lighting.intensity,
+    );
     mainScene.add(primaryLight);
     primaryLightRef.current = primaryLight;
 
-    const fillLight = new THREE.DirectionalLight(0xffffff, settings.lighting.fillIntensity);
+    const fillLight = new THREE.DirectionalLight(
+      0xffffff,
+      settings.lighting.fillIntensity,
+    );
     mainScene.add(fillLight);
     fillLightRef.current = fillLight;
 
@@ -1952,14 +2282,15 @@ export default function CanvasViewport({
     const pointsGeom = new THREE.BufferGeometry();
     const pointsCount = 2000;
     const coords = new Float32Array(pointsCount * 3);
-    for(let i=0; i<pointsCount * 3; i++) coords[i] = (Math.random() - 0.5) * 15;
-    pointsGeom.setAttribute('position', new THREE.BufferAttribute(coords, 3));
+    for (let i = 0; i < pointsCount * 3; i++)
+      coords[i] = (Math.random() - 0.5) * 15;
+    pointsGeom.setAttribute("position", new THREE.BufferAttribute(coords, 3));
     const pointsMat = new THREE.PointsMaterial({
       color: 0xffffff,
       size: 0.015,
       transparent: true,
       opacity: 0,
-      sizeAttenuation: true
+      sizeAttenuation: true,
     });
     const particles = new THREE.Points(pointsGeom, pointsMat);
     mainScene.add(particles);
@@ -1967,16 +2298,28 @@ export default function CanvasViewport({
 
     // Position light based on input angle
     const angleRad = (settings.lighting.angleDegrees * Math.PI) / 180;
-    primaryLight.position.set(Math.cos(angleRad) * 4.0, settings.lighting.height, Math.sin(angleRad) * 4.0);
-    fillLight.position.set(-Math.cos(angleRad) * 3.0, -settings.lighting.height * 0.3, -Math.sin(angleRad) * 3.0);
+    primaryLight.position.set(
+      Math.cos(angleRad) * 4.0,
+      settings.lighting.height,
+      Math.sin(angleRad) * 4.0,
+    );
+    fillLight.position.set(
+      -Math.cos(angleRad) * 3.0,
+      -settings.lighting.height * 0.3,
+      -Math.sin(angleRad) * 3.0,
+    );
 
     // BUILD DEEPLY CUSTOM CUSTOM SCREEN-SPACE POSTPROCESSING ENGINE
     // WebGLRenderTarget holds the rendered un-halftoned 3D shape
-    const renderTarget = new THREE.WebGLRenderTarget(width * window.devicePixelRatio, height * window.devicePixelRatio, {
-      minFilter: THREE.LinearFilter,
-      magFilter: THREE.LinearFilter,
-      format: THREE.RGBAFormat,
-    });
+    const renderTarget = new THREE.WebGLRenderTarget(
+      width * window.devicePixelRatio,
+      height * window.devicePixelRatio,
+      {
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat,
+      },
+    );
     renderTargetRef.current = renderTarget;
 
     // Full screen 2D post scene
@@ -1987,7 +2330,7 @@ export default function CanvasViewport({
     postCameraRef.current = postCamera;
 
     // Dynamic Shader uniform variables
-    const toneTargetCode = settings.halftone.toneTarget === 'light' ? 0 : 1;
+    const toneTargetCode = settings.halftone.toneTarget === "light" ? 0 : 1;
 
     const shaderMaterial = new THREE.ShaderMaterial({
       transparent: true,
@@ -2215,21 +2558,27 @@ export default function CanvasViewport({
         uPower: { value: settings.halftone.power },
         uWidth: { value: settings.halftone.width },
         uToneTarget: { value: toneTargetCode },
-        uPatternWeights: { value: new THREE.Vector4(
-          settings.halftone.shape === 'dots' ? 1.0 : 0.0,
-          settings.halftone.shape === 'squares' ? 1.0 : 0.0,
-          settings.halftone.shape === 'lines' ? 1.0 : 0.0,
-          settings.halftone.shape === 'crosshatch' ? 1.0 : 0.0
-        ) },
+        uPatternWeights: {
+          value: new THREE.Vector4(
+            settings.halftone.shape === "dots" ? 1.0 : 0.0,
+            settings.halftone.shape === "squares" ? 1.0 : 0.0,
+            settings.halftone.shape === "lines" ? 1.0 : 0.0,
+            settings.halftone.shape === "crosshatch" ? 1.0 : 0.0,
+          ),
+        },
         uPatternColor: { value: new THREE.Color(settings.halftone.dashColor) },
-        uHoverColor: { value: new THREE.Color(settings.halftone.hoverDashColor) },
+        uHoverColor: {
+          value: new THREE.Color(settings.halftone.hoverDashColor),
+        },
         uHoverProgress: { value: 0.0 },
         uTransparent: { value: true },
         uBgColor: { value: new THREE.Color(settings.background.color) },
         uHalftoneEnabled: { value: settings.halftone.enabled },
         uContrast: { value: settings.halftone.imageContrast },
         uDragOffset: { value: new THREE.Vector2(0, 0) },
-        uDragFlowEnabled: { value: settings.animation?.dragFlowEnabled ?? false },
+        uDragFlowEnabled: {
+          value: settings.animation?.dragFlowEnabled ?? false,
+        },
         uGridAngle: { value: (settings.halftone.gridAngle * Math.PI) / 180 },
         uUseImageColors: { value: settings.halftone.useImageColors },
         uShadowOpacity: { value: settings.lighting.shadowOpacity },
@@ -2243,16 +2592,23 @@ export default function CanvasViewport({
         uBloomIntensity: { value: settings.bloom.bloomIntensity },
         uGradientEnabled: { value: settings.gradient.enabled },
         uGradientCount: { value: settings.gradient.stops.length },
-        uGradientColors: { value: (() => {
-          const arr = settings.gradient.stops.map(s => { const c = new THREE.Color(s.color); return new THREE.Vector3(c.r, c.g, c.b); });
-          while (arr.length < 8) arr.push(new THREE.Vector3(0, 0, 0));
-          return arr;
-        })() },
-        uGradientOffsets: { value: (() => {
-          const arr = settings.gradient.stops.map(s => s.offset);
-          while (arr.length < 8) arr.push(0);
-          return arr;
-        })() },
+        uGradientColors: {
+          value: (() => {
+            const arr = settings.gradient.stops.map((s) => {
+              const c = new THREE.Color(s.color);
+              return new THREE.Vector3(c.r, c.g, c.b);
+            });
+            while (arr.length < 8) arr.push(new THREE.Vector3(0, 0, 0));
+            return arr;
+          })(),
+        },
+        uGradientOffsets: {
+          value: (() => {
+            const arr = settings.gradient.stops.map((s) => s.offset);
+            while (arr.length < 8) arr.push(0);
+            return arr;
+          })(),
+        },
         uGradientAnimate: { value: settings.gradient.animate },
         uGradientSpeed: { value: settings.gradient.speed },
       },
@@ -2260,21 +2616,30 @@ export default function CanvasViewport({
 
     shaderMaterialRef.current = shaderMaterial;
 
-    const postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), shaderMaterial);
+    const postQuad = new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      shaderMaterial,
+    );
     postScene.add(postQuad);
 
     // Bootstrap Geometry
-    updateGeometry(settings.shapeKey, settings.sourceMode, settings.textString, settings.imageSrc, settings.fontBold);
+    updateGeometry(
+      settings.shapeKey,
+      settings.sourceMode,
+      settings.textString,
+      settings.imageSrc,
+      settings.fontBold,
+    );
 
     // Animation Tick Frame
     let clock = new THREE.Clock();
     let animationFrameId: number;
 
     const currentPatternWeights = new THREE.Vector4(
-      settings.halftone.shape === 'dots' ? 1.0 : 0.0,
-      settings.halftone.shape === 'squares' ? 1.0 : 0.0,
-      settings.halftone.shape === 'lines' ? 1.0 : 0.0,
-      settings.halftone.shape === 'crosshatch' ? 1.0 : 0.0
+      settings.halftone.shape === "dots" ? 1.0 : 0.0,
+      settings.halftone.shape === "squares" ? 1.0 : 0.0,
+      settings.halftone.shape === "lines" ? 1.0 : 0.0,
+      settings.halftone.shape === "crosshatch" ? 1.0 : 0.0,
     );
 
     const tick = () => {
@@ -2284,34 +2649,45 @@ export default function CanvasViewport({
       // Blend pattern weights smoothly to prevent snapping
       const targetWeights = new THREE.Vector4(0, 0, 0, 0);
       const activeShape = settingsRef.current.halftone.shape;
-      if (activeShape === 'dots') targetWeights.x = 1.0;
-      else if (activeShape === 'squares') targetWeights.y = 1.0;
-      else if (activeShape === 'lines') targetWeights.z = 1.0;
-      else if (activeShape === 'crosshatch') targetWeights.w = 1.0;
+      if (activeShape === "dots") targetWeights.x = 1.0;
+      else if (activeShape === "squares") targetWeights.y = 1.0;
+      else if (activeShape === "lines") targetWeights.z = 1.0;
+      else if (activeShape === "crosshatch") targetWeights.w = 1.0;
 
       const lerpSpeed = 7.0;
       const factor = 1.0 - Math.exp(-lerpSpeed * delta);
-      currentPatternWeights.x += (targetWeights.x - currentPatternWeights.x) * factor;
-      currentPatternWeights.y += (targetWeights.y - currentPatternWeights.y) * factor;
-      currentPatternWeights.z += (targetWeights.z - currentPatternWeights.z) * factor;
-      currentPatternWeights.w += (targetWeights.w - currentPatternWeights.w) * factor;
+      currentPatternWeights.x +=
+        (targetWeights.x - currentPatternWeights.x) * factor;
+      currentPatternWeights.y +=
+        (targetWeights.y - currentPatternWeights.y) * factor;
+      currentPatternWeights.z +=
+        (targetWeights.z - currentPatternWeights.z) * factor;
+      currentPatternWeights.w +=
+        (targetWeights.w - currentPatternWeights.w) * factor;
 
       // Lerp mouse rotations for premium spring reaction
       if (meshGroupRef.current) {
         meshGroupRef.current.rotation.z = 0;
 
         // Apply Drag Momentum decay and sliding when NOT dragging
-        if (settingsRef.current.animation.followDragEnabled && settingsRef.current.animation.dragMomentum && !isDraggingRef.current) {
+        if (
+          settingsRef.current.animation.followDragEnabled &&
+          settingsRef.current.animation.dragMomentum &&
+          !isDraggingRef.current
+        ) {
           targetRotationRef.current.y += dragMomentumVelocityRef.current.x;
           targetRotationRef.current.x += dragMomentumVelocityRef.current.y;
-          
+
           // Apply friction damping
           const friction = 1.0 - settingsRef.current.animation.dragFriction;
           dragMomentumVelocityRef.current.x *= friction;
           dragMomentumVelocityRef.current.y *= friction;
 
           // Clamping to prevent flipping upside down during momentum
-          targetRotationRef.current.x = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, targetRotationRef.current.x));
+          targetRotationRef.current.x = Math.max(
+            -Math.PI / 2.5,
+            Math.min(Math.PI / 2.5, targetRotationRef.current.x),
+          );
         } else if (!isDraggingRef.current) {
           dragMomentumVelocityRef.current = { x: 0, y: 0 };
         }
@@ -2324,12 +2700,15 @@ export default function CanvasViewport({
             const rSpeed = settingsRef.current.animation.rotateSpeed * 1.5;
             const isPingPong = settingsRef.current.animation.rotatePingPong;
 
-            if (preset === 'free') {
+            if (preset === "free") {
               // Free rotate on all axes
               if (isPingPong) {
-                targetRotationRef.current.x = Math.sin(time * rSpeed * 0.6) * 0.4;
-                targetRotationRef.current.y = Math.cos(time * rSpeed * 0.5) * 0.4;
-                meshGroupRef.current.rotation.z = Math.sin(time * rSpeed * 0.3) * 0.3;
+                targetRotationRef.current.x =
+                  Math.sin(time * rSpeed * 0.6) * 0.4;
+                targetRotationRef.current.y =
+                  Math.cos(time * rSpeed * 0.5) * 0.4;
+                meshGroupRef.current.rotation.z =
+                  Math.sin(time * rSpeed * 0.3) * 0.3;
               } else {
                 targetRotationRef.current.x += rSpeed * 0.4 * delta;
                 targetRotationRef.current.y += rSpeed * 0.6 * delta;
@@ -2339,32 +2718,39 @@ export default function CanvasViewport({
               // Axis rotate
               if (isPingPong) {
                 const angle = Math.sin(time * rSpeed) * 0.8;
-                if (axis === 'x') {
+                if (axis === "x") {
                   targetRotationRef.current.x = angle;
-                } else if (axis === 'y') {
+                } else if (axis === "y") {
                   targetRotationRef.current.y = angle;
-                } else if (axis === 'z') {
+                } else if (axis === "z") {
                   meshGroupRef.current.rotation.z = angle;
                 }
               } else {
-                if (axis === 'x') {
+                if (axis === "x") {
                   targetRotationRef.current.x += rSpeed * delta;
-                } else if (axis === 'y') {
+                } else if (axis === "y") {
                   targetRotationRef.current.y += rSpeed * delta;
-                } else if (axis === 'z') {
+                } else if (axis === "z") {
                   meshGroupRef.current.rotation.z = time * rSpeed;
                 }
               }
             }
           } else if (settingsRef.current.animation.autoRotateEnabled) {
             // Idle auto-rotate is active
-            if (settingsRef.current.sourceMode === 'shape') {
+            if (settingsRef.current.sourceMode === "shape") {
               // Slow continuous rotation
-              targetRotationRef.current.y += settingsRef.current.animation.autoSpeed * delta;
+              targetRotationRef.current.y +=
+                settingsRef.current.animation.autoSpeed * delta;
             } else {
               // Gentle periodic sway on both axis for text and image modes to prevent turning sideways
-              targetRotationRef.current.y = Math.sin(time * settingsRef.current.animation.autoSpeed * 1.25) * 0.24;
-              targetRotationRef.current.x = 0.12 + Math.cos(time * settingsRef.current.animation.autoSpeed * 0.6) * 0.08;
+              targetRotationRef.current.y =
+                Math.sin(
+                  time * settingsRef.current.animation.autoSpeed * 1.25,
+                ) * 0.24;
+              targetRotationRef.current.x =
+                0.12 +
+                Math.cos(time * settingsRef.current.animation.autoSpeed * 0.6) *
+                  0.08;
             }
           }
         }
@@ -2373,18 +2759,23 @@ export default function CanvasViewport({
         let finalRotX = 0;
         let finalRotY = 0;
 
-        if (settingsRef.current.animation.springReturnEnabled && !isDraggingRef.current) {
+        if (
+          settingsRef.current.animation.springReturnEnabled &&
+          !isDraggingRef.current
+        ) {
           // Dynamic mass-spring-damper ODE physical solver
           const tension = settingsRef.current.animation.springStrength * 100.0;
           const damping = settingsRef.current.animation.springDamping * 10.0;
 
           const diffX = targetRotationRef.current.x - meshRotationXRef.current;
-          const forceX = diffX * tension - springVelocityRef.current.x * damping;
+          const forceX =
+            diffX * tension - springVelocityRef.current.x * damping;
           springVelocityRef.current.x += forceX * delta;
           meshRotationXRef.current += springVelocityRef.current.x * delta;
 
           const diffY = targetRotationRef.current.y - meshRotationYRef.current;
-          const forceY = diffY * tension - springVelocityRef.current.y * damping;
+          const forceY =
+            diffY * tension - springVelocityRef.current.y * damping;
           springVelocityRef.current.y += forceY * delta;
           meshRotationYRef.current += springVelocityRef.current.y * delta;
 
@@ -2395,12 +2786,12 @@ export default function CanvasViewport({
           meshRotationXRef.current = THREE.MathUtils.lerp(
             meshRotationXRef.current,
             targetRotationRef.current.x,
-            settingsRef.current.animation.springStrength
+            settingsRef.current.animation.springStrength,
           );
           meshRotationYRef.current = THREE.MathUtils.lerp(
             meshRotationYRef.current,
             targetRotationRef.current.y,
-            settingsRef.current.animation.springStrength
+            settingsRef.current.animation.springStrength,
           );
 
           finalRotX = meshRotationXRef.current;
@@ -2409,17 +2800,26 @@ export default function CanvasViewport({
         }
 
         // Apply gentle background wobble (only when general rotation preset is disabled)
-        if (settingsRef.current.animation.autoWobble > 0 && !isDraggingRef.current && !settingsRef.current.animation.rotateEnabled) {
-          finalRotX += Math.sin(time) * settingsRef.current.animation.autoWobble * 0.15;
+        if (
+          settingsRef.current.animation.autoWobble > 0 &&
+          !isDraggingRef.current &&
+          !settingsRef.current.animation.rotateEnabled
+        ) {
+          finalRotX +=
+            Math.sin(time) * settingsRef.current.animation.autoWobble * 0.15;
         }
 
         // --- MOUSE HOVER TILT MATHEMATICS ---
         let hoverTargetX = 0;
         let hoverTargetY = 0;
 
-        if (settingsRef.current.animation.followHoverEnabled && !isDraggingRef.current) {
+        if (
+          settingsRef.current.animation.followHoverEnabled &&
+          !isDraggingRef.current
+        ) {
           if (isHoveredRef.current) {
-            const maxTiltAngleRad = (settingsRef.current.animation.hoverRange * Math.PI) / 180;
+            const maxTiltAngleRad =
+              (settingsRef.current.animation.hoverRange * Math.PI) / 180;
             // Screen coordinate mapping
             hoverTargetX = -mousePositionRef.current.y * maxTiltAngleRad;
             hoverTargetY = mousePositionRef.current.x * maxTiltAngleRad;
@@ -2434,8 +2834,10 @@ export default function CanvasViewport({
         }
 
         const easeCoeff = settingsRef.current.animation.hoverEase;
-        hoverOffsetRotationRef.current.x += (hoverTargetX - hoverOffsetRotationRef.current.x) * easeCoeff;
-        hoverOffsetRotationRef.current.y += (hoverTargetY - hoverOffsetRotationRef.current.y) * easeCoeff;
+        hoverOffsetRotationRef.current.x +=
+          (hoverTargetX - hoverOffsetRotationRef.current.x) * easeCoeff;
+        hoverOffsetRotationRef.current.y +=
+          (hoverTargetY - hoverOffsetRotationRef.current.y) * easeCoeff;
 
         // Apply additive Hover tilt offset
         finalRotX += hoverOffsetRotationRef.current.x;
@@ -2447,7 +2849,10 @@ export default function CanvasViewport({
 
         // Breathing geometry scale
         if (settingsRef.current.animation.breatheEnabled) {
-          const osc = 1.0 + Math.sin(time * settingsRef.current.animation.breatheSpeed * 3) * settingsRef.current.animation.breatheAmount;
+          const osc =
+            1.0 +
+            Math.sin(time * settingsRef.current.animation.breatheSpeed * 3) *
+              settingsRef.current.animation.breatheAmount;
           meshGroupRef.current.scale.set(osc, osc, osc);
         } else {
           meshGroupRef.current.scale.set(1, 1, 1);
@@ -2455,9 +2860,15 @@ export default function CanvasViewport({
 
         // Float motion up and down with Drift sideways swaying
         if (settingsRef.current.animation.floatEnabled) {
-          meshGroupRef.current.position.y = Math.sin(time * settingsRef.current.animation.floatSpeed * 2.5) * settingsRef.current.animation.floatAmplitude;
-          const driftAngleRad = ((settingsRef.current.animation.driftAmount ?? 8) * Math.PI) / 180;
-          meshGroupRef.current.position.x = Math.sin(time * settingsRef.current.animation.floatSpeed * 1.25) * Math.sin(driftAngleRad) * 0.8;
+          meshGroupRef.current.position.y =
+            Math.sin(time * settingsRef.current.animation.floatSpeed * 2.5) *
+            settingsRef.current.animation.floatAmplitude;
+          const driftAngleRad =
+            ((settingsRef.current.animation.driftAmount ?? 8) * Math.PI) / 180;
+          meshGroupRef.current.position.x =
+            Math.sin(time * settingsRef.current.animation.floatSpeed * 1.25) *
+            Math.sin(driftAngleRad) *
+            0.8;
         } else {
           meshGroupRef.current.position.y = 0;
           meshGroupRef.current.position.x = 0;
@@ -2468,8 +2879,10 @@ export default function CanvasViewport({
           const wSpeed = settingsRef.current.animation.waveSpeed;
           const wAmount = settingsRef.current.animation.waveAmount;
           meshGroupRef.current.children.forEach((child, idx) => {
-            child.position.y = Math.sin(time * wSpeed * 4.0 + idx * 0.8) * wAmount * 0.12;
-            child.rotation.z = Math.cos(time * wSpeed * 3.0 + idx * 0.6) * wAmount * 0.04;
+            child.position.y =
+              Math.sin(time * wSpeed * 4.0 + idx * 0.8) * wAmount * 0.12;
+            child.rotation.z =
+              Math.cos(time * wSpeed * 3.0 + idx * 0.6) * wAmount * 0.04;
           });
         } else {
           // Reset wave coordinates
@@ -2481,40 +2894,71 @@ export default function CanvasViewport({
       }
 
       // Light Sweep animation back and forth
-      if (primaryLightRef.current && settingsRef.current.animation.lightSweepEnabled) {
+      if (
+        primaryLightRef.current &&
+        settingsRef.current.animation.lightSweepEnabled
+      ) {
         const sweepSpeed = settingsRef.current.animation.lightSweepSpeed ?? 0.5;
-        const sweepRange = settingsRef.current.animation.lightSweepRange ?? 28; 
-        const sweepHeightRange = settingsRef.current.animation.lightSweepHeightRange ?? 0.5;
-        
-        const dynamicAngleRad = ((settingsRef.current.lighting.angleDegrees + Math.sin(time * sweepSpeed * 3.0) * sweepRange) * Math.PI) / 180;
-        const dynamicHeight = settingsRef.current.lighting.height + Math.cos(time * sweepSpeed * 2.0) * sweepHeightRange;
+        const sweepRange = settingsRef.current.animation.lightSweepRange ?? 28;
+        const sweepHeightRange =
+          settingsRef.current.animation.lightSweepHeightRange ?? 0.5;
+
+        const dynamicAngleRad =
+          ((settingsRef.current.lighting.angleDegrees +
+            Math.sin(time * sweepSpeed * 3.0) * sweepRange) *
+            Math.PI) /
+          180;
+        const dynamicHeight =
+          settingsRef.current.lighting.height +
+          Math.cos(time * sweepSpeed * 2.0) * sweepHeightRange;
         primaryLightRef.current.position.set(
           Math.cos(dynamicAngleRad) * 4.0,
           dynamicHeight,
-          Math.sin(dynamicAngleRad) * 4.0
+          Math.sin(dynamicAngleRad) * 4.0,
         );
       }
 
       // Parallax interaction mapping
-      if (settingsRef.current.animation.cameraParallaxEnabled && cameraRef.current) {
-        const targetCamX = mousePositionRef.current.x * settingsRef.current.animation.cameraParallaxAmount;
-        const targetCamY = mousePositionRef.current.y * settingsRef.current.animation.cameraParallaxAmount;
-        cameraRef.current.position.x = THREE.MathUtils.lerp(cameraRef.current.position.x, targetCamX, settingsRef.current.animation.cameraParallaxEase);
-        cameraRef.current.position.y = THREE.MathUtils.lerp(cameraRef.current.position.y, targetCamY, settingsRef.current.animation.cameraParallaxEase);
+      if (
+        settingsRef.current.animation.cameraParallaxEnabled &&
+        cameraRef.current
+      ) {
+        const targetCamX =
+          mousePositionRef.current.x *
+          settingsRef.current.animation.cameraParallaxAmount;
+        const targetCamY =
+          mousePositionRef.current.y *
+          settingsRef.current.animation.cameraParallaxAmount;
+        cameraRef.current.position.x = THREE.MathUtils.lerp(
+          cameraRef.current.position.x,
+          targetCamX,
+          settingsRef.current.animation.cameraParallaxEase,
+        );
+        cameraRef.current.position.y = THREE.MathUtils.lerp(
+          cameraRef.current.position.y,
+          targetCamY,
+          settingsRef.current.animation.cameraParallaxEase,
+        );
         cameraRef.current.lookAt(0, 0, 0);
       }
 
       // Hover color smooth interpolation blending
       const targetHover = isHoveredRef.current ? 1.0 : 0.0;
-      hoverProgressRef.current = THREE.MathUtils.lerp(hoverProgressRef.current, targetHover, 0.1);
-      
+      hoverProgressRef.current = THREE.MathUtils.lerp(
+        hoverProgressRef.current,
+        targetHover,
+        0.1,
+      );
+
       // Drag Flow inertia update
       if (settingsRef.current.animation.dragFlowEnabled) {
         dragFlowOffsetRef.current.x += dragFlowVelocityRef.current.x;
         dragFlowOffsetRef.current.y += dragFlowVelocityRef.current.y;
 
-        dragFlowVelocityRef.current.x *= (1.0 - settingsRef.current.animation.dragFlowDecay);
-        dragFlowVelocityRef.current.y *= (1.0 - settingsRef.current.animation.dragFlowDecay);
+        dragFlowVelocityRef.current.x *=
+          1.0 - settingsRef.current.animation.dragFlowDecay;
+        dragFlowVelocityRef.current.y *=
+          1.0 - settingsRef.current.animation.dragFlowDecay;
 
         dragFlowOffsetRef.current.x *= 0.95;
         dragFlowOffsetRef.current.y *= 0.95;
@@ -2526,26 +2970,36 @@ export default function CanvasViewport({
       if (shaderMaterialRef.current) {
         timeRef.current = time;
         shaderMaterialRef.current.uniforms.uTime.value = time;
-        shaderMaterialRef.current.uniforms.uHoverProgress.value = hoverProgressRef.current;
+        shaderMaterialRef.current.uniforms.uHoverProgress.value =
+          hoverProgressRef.current;
         shaderMaterialRef.current.uniforms.uDragOffset.value.set(
           dragFlowOffsetRef.current.x,
-          dragFlowOffsetRef.current.y
+          dragFlowOffsetRef.current.y,
         );
-        shaderMaterialRef.current.uniforms.uPatternWeights.value.copy(currentPatternWeights);
-        shaderMaterialRef.current.uniforms.uHalftoneEnabled.value = settingsRef.current.halftone.enabled;
-        shaderMaterialRef.current.uniforms.uShadowToneIntensity.value = settingsRef.current.halftone.shadowToneIntensity;
-        shaderMaterialRef.current.uniforms.uShadowToneBlur.value = settingsRef.current.halftone.shadowToneBlur;
+        shaderMaterialRef.current.uniforms.uPatternWeights.value.copy(
+          currentPatternWeights,
+        );
+        shaderMaterialRef.current.uniforms.uHalftoneEnabled.value =
+          settingsRef.current.halftone.enabled;
+        shaderMaterialRef.current.uniforms.uShadowToneIntensity.value =
+          settingsRef.current.halftone.shadowToneIntensity;
+        shaderMaterialRef.current.uniforms.uShadowToneBlur.value =
+          settingsRef.current.halftone.shadowToneBlur;
       }
 
       // Update Fragmentation and Particles
       if (meshGroupRef.current) {
-        const frag = settingsRef.current.shapeModifiers.fragmentationAmount || 0;
+        const frag =
+          settingsRef.current.shapeModifiers.fragmentationAmount || 0;
         meshGroupRef.current.children.forEach((child: any) => {
           if (child.isMesh || child.isGroup) {
-            if (!child.userData.origin) child.userData.origin = child.position.clone();
+            if (!child.userData.origin)
+              child.userData.origin = child.position.clone();
             const dir = child.userData.origin.clone().normalize();
-            child.position.copy(child.userData.origin).add(dir.multiplyScalar(frag));
-            
+            child.position
+              .copy(child.userData.origin)
+              .add(dir.multiplyScalar(frag));
+
             // Random micro-rotation for fragment look
             if (frag > 0.1) {
               child.rotation.x += frag * 0.005;
@@ -2555,14 +3009,17 @@ export default function CanvasViewport({
         });
       }
 
+      // পরিবর্তন করুন
       if (particlesRef.current) {
-        particlesRef.current.visible = settingsRef.current.shapeModifiers.particlesEnabled;
+        const mat = particlesRef.current.material as THREE.PointsMaterial;
+        particlesRef.current.visible =
+          settingsRef.current.shapeModifiers.particlesEnabled;
         if (particlesRef.current.visible) {
-          particlesRef.current.material.opacity = THREE.MathUtils.lerp(particlesRef.current.material.opacity, 0.4, 0.05);
+          mat.opacity = THREE.MathUtils.lerp(mat.opacity, 0.4, 0.05);
           particlesRef.current.rotation.y += 0.001;
           particlesRef.current.rotation.x += 0.0005;
         } else {
-          particlesRef.current.material.opacity = 0;
+          mat.opacity = 0;
         }
       }
 
@@ -2573,7 +3030,7 @@ export default function CanvasViewport({
       renderer.setClearColor(0x000000, 0);
       renderer.render(mainScene, camera);
       mainScene.background = savedBackground;
-      
+
       renderer.setRenderTarget(null);
       renderer.render(postScene, postCamera);
 
@@ -2600,7 +3057,10 @@ export default function CanvasViewport({
       }
 
       if (renderTargetRef.current) {
-        renderTargetRef.current.setSize(width * window.devicePixelRatio, height * window.devicePixelRatio);
+        renderTargetRef.current.setSize(
+          width * window.devicePixelRatio,
+          height * window.devicePixelRatio,
+        );
       }
 
       if (shaderMaterialRef.current) {
@@ -2619,7 +3079,7 @@ export default function CanvasViewport({
       if (envTextureRef.current) {
         envTextureRef.current.dispose();
       }
-      
+
       // Clean up geometries
       mainScene.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
@@ -2641,7 +3101,7 @@ export default function CanvasViewport({
       u.uScale.value = settings.halftone.scale;
       u.uPower.value = settings.halftone.power;
       u.uWidth.value = settings.halftone.width;
-      u.uToneTarget.value = settings.halftone.toneTarget === 'light' ? 0 : 1;
+      u.uToneTarget.value = settings.halftone.toneTarget === "light" ? 0 : 1;
       u.uPatternColor.value.set(settings.halftone.dashColor);
       u.uHoverColor.value.set(settings.halftone.hoverDashColor);
       u.uTransparent.value = settings.background.transparent;
@@ -2658,36 +3118,61 @@ export default function CanvasViewport({
       u.uShadowToneIntensity.value = settings.halftone.shadowToneIntensity;
       u.uShadowToneBlur.value = settings.halftone.shadowToneBlur;
       if (u.uBloomEnabled) u.uBloomEnabled.value = settings.bloom.enabled;
-      if (u.uBloomIntensity) u.uBloomIntensity.value = settings.bloom.bloomIntensity;
+      if (u.uBloomIntensity)
+        u.uBloomIntensity.value = settings.bloom.bloomIntensity;
       if (u.uGradientEnabled) {
-          u.uGradientEnabled.value = activePage === 'gradient' || settings.gradient.enabled;
-          u.uGradientCount.value = settings.gradient.stops.length;
-          u.uGradientColors.value = (() => {
-            const arr = settings.gradient.stops.map(s => { const c = new THREE.Color(s.color); return new THREE.Vector3(c.r, c.g, c.b); });
-            while (arr.length < 8) arr.push(new THREE.Vector3(0, 0, 0));
-            return arr;
-          })();
-          u.uGradientOffsets.value = (() => {
-            const arr = settings.gradient.stops.map(s => s.offset);
-            while (arr.length < 8) arr.push(0);
-            return arr;
-          })();
-          u.uGradientAnimate.value = settings.gradient.animate;
-          u.uGradientSpeed.value = settings.gradient.speed;
+        u.uGradientEnabled.value =
+          activePage === "gradient" || settings.gradient.enabled;
+        u.uGradientCount.value = settings.gradient.stops.length;
+        u.uGradientColors.value = (() => {
+          const arr = settings.gradient.stops.map((s) => {
+            const c = new THREE.Color(s.color);
+            return new THREE.Vector3(c.r, c.g, c.b);
+          });
+          while (arr.length < 8) arr.push(new THREE.Vector3(0, 0, 0));
+          return arr;
+        })();
+        u.uGradientOffsets.value = (() => {
+          const arr = settings.gradient.stops.map((s) => s.offset);
+          while (arr.length < 8) arr.push(0);
+          return arr;
+        })();
+        u.uGradientAnimate.value = settings.gradient.animate;
+        u.uGradientSpeed.value = settings.gradient.speed;
       }
     }
-    
+
     // Light changes
-    if (primaryLightRef.current && fillLightRef.current && ambientLightRef.current) {
+    if (
+      primaryLightRef.current &&
+      fillLightRef.current &&
+      ambientLightRef.current
+    ) {
       primaryLightRef.current.intensity = settings.lighting.intensity;
       fillLightRef.current.intensity = settings.lighting.fillIntensity;
       ambientLightRef.current.intensity = settings.lighting.ambientIntensity;
-      
+
       const angleRad = (settings.lighting.angleDegrees * Math.PI) / 180;
-      primaryLightRef.current.position.set(Math.cos(angleRad) * 4.0, settings.lighting.height, Math.sin(angleRad) * 4.0);
-      fillLightRef.current.position.set(-Math.cos(angleRad) * 3.0, -settings.lighting.height * 0.3, -Math.sin(angleRad) * 3.0);
+      primaryLightRef.current.position.set(
+        Math.cos(angleRad) * 4.0,
+        settings.lighting.height,
+        Math.sin(angleRad) * 4.0,
+      );
+      fillLightRef.current.position.set(
+        -Math.cos(angleRad) * 3.0,
+        -settings.lighting.height * 0.3,
+        -Math.sin(angleRad) * 3.0,
+      );
     }
-  }, [settings.halftone, settings.background, settings.lighting, settings.animation?.dragFlowEnabled, settings.bloom, settings.gradient, activePage]);
+  }, [
+    settings.halftone,
+    settings.background,
+    settings.lighting,
+    settings.animation?.dragFlowEnabled,
+    settings.bloom,
+    settings.gradient,
+    activePage,
+  ]);
 
   // Handle Drag rotations
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -2700,7 +3185,7 @@ export default function CanvasViewport({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLElement>) => {
     // Record screen normalized mouse for parallax
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
@@ -2726,7 +3211,10 @@ export default function CanvasViewport({
     }
 
     // Limit X axis rotation to prevent flipping upside down
-    targetRotationRef.current.x = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, targetRotationRef.current.x));
+    targetRotationRef.current.x = Math.max(
+      -Math.PI / 2.5,
+      Math.min(Math.PI / 2.5, targetRotationRef.current.x),
+    );
 
     if (settingsRef.current.animation.dragFlowEnabled) {
       dragFlowVelocityRef.current.x += deltaX * 0.003;
@@ -2746,7 +3234,10 @@ export default function CanvasViewport({
 
     // If spring return is enabled, spring back to the default coordinates upon drag release
     if (settingsRef.current.animation.springReturnEnabled) {
-      if (!settingsRef.current.animation.autoRotateEnabled && !settingsRef.current.animation.rotateEnabled) {
+      if (
+        !settingsRef.current.animation.autoRotateEnabled &&
+        !settingsRef.current.animation.rotateEnabled
+      ) {
         targetRotationRef.current = { x: 0.3, y: 0.4 };
       }
     }
@@ -2757,13 +3248,17 @@ export default function CanvasViewport({
   };
 
   return (
-    <div 
+    <div
       id="viewport-frame"
-      ref={containerRef} 
-      className={`relative w-full h-[32rem] md:h-full flex items-center justify-center overflow-hidden border border-white/10 rounded cursor-grab active:cursor-grabbing transition-all shadow-2xl ${
-        settings.background.transparent ? 'bg-[#050505]' : ''
+      ref={containerRef}
+      className={`relative w-full h-128 md:h-full flex items-center justify-center overflow-hidden border border-white/10 rounded cursor-grab active:cursor-grabbing transition-all shadow-2xl ${
+        settings.background.transparent ? "bg-[#050505]" : ""
       }`}
-      style={!settings.background.transparent ? { backgroundColor: settings.background.color } : undefined}
+      style={
+        !settings.background.transparent
+          ? { backgroundColor: settings.background.color }
+          : undefined
+      }
       onMouseEnter={() => onHoverChange(true)}
       onMouseLeave={() => {
         onHoverChange(false);
@@ -2789,7 +3284,13 @@ export default function CanvasViewport({
           id="btn-zoom-in"
           onClick={() => {
             if (onChange) {
-              onChange((prev) => ({ ...prev, distance: Math.max(1.5, Number((prev.distance - 0.5).toFixed(1))) }));
+              onChange((prev) => ({
+                ...prev,
+                distance: Math.max(
+                  1.5,
+                  Number((prev.distance - 0.5).toFixed(1)),
+                ),
+              }));
             }
           }}
           className="p-1.5 bg-black/80 backdrop-blur border border-white/10 text-white/60 hover:text-white rounded hover:bg-neutral-900 active:scale-95 transition-all shadow-md"
@@ -2801,7 +3302,13 @@ export default function CanvasViewport({
           id="btn-zoom-out"
           onClick={() => {
             if (onChange) {
-              onChange((prev) => ({ ...prev, distance: Math.min(10.0, Number((prev.distance + 0.5).toFixed(1))) }));
+              onChange((prev) => ({
+                ...prev,
+                distance: Math.min(
+                  10.0,
+                  Number((prev.distance + 0.5).toFixed(1)),
+                ),
+              }));
             }
           }}
           className="p-1.5 bg-black/80 backdrop-blur border border-white/10 text-white/60 hover:text-white rounded hover:bg-neutral-900 active:scale-95 transition-all shadow-md"
@@ -2824,7 +3331,9 @@ export default function CanvasViewport({
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-xs">
           <div className="flex flex-col items-center gap-2">
             <RefreshCw className="animate-spin text-indigo-500" size={24} />
-            <span className="text-[10px] text-white/50 font-bold tracking-widest font-mono uppercase">Compiling vector grid...</span>
+            <span className="text-[10px] text-white/50 font-bold tracking-widest font-mono uppercase">
+              Compiling vector grid...
+            </span>
           </div>
         </div>
       )}
@@ -2832,8 +3341,12 @@ export default function CanvasViewport({
       {/* Sophisticated Dark Interaction Hints */}
       {!dragActive && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white/5 backdrop-blur px-3 py-1.5 rounded border border-white/10 pointer-events-none z-10">
-          <div className="w-4 h-4 border border-white/20 rounded flex items-center justify-center text-[9px] text-white/60 font-mono">L</div>
-          <span className="text-[9px] uppercase tracking-widest text-white/60 font-mono">Click & Drag to Rotate</span>
+          <div className="w-4 h-4 border border-white/20 rounded flex items-center justify-center text-[9px] text-white/60 font-mono">
+            L
+          </div>
+          <span className="text-[9px] uppercase tracking-widest text-white/60 font-mono">
+            Click & Drag to Rotate
+          </span>
         </div>
       )}
     </div>

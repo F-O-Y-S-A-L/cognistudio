@@ -246,7 +246,7 @@ export default function App() {
         <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden min-h-0">
           
           {/* Core Canvas Viewport */}
-          <main className="flex-1 p-2 md:p-4 lg:p-6 flex flex-col gap-4 relative min-w-0 min-h-[400px] lg:min-h-0 shrink-0 lg:shrink">
+          <main className="flex-1 p-2 md:p-4 lg:p-6 flex flex-col gap-4 relative min-w-0 min-h-100 lg:min-h-0 shrink-0 lg:shrink">
             <div className="flex-1 relative rounded overflow-hidden shadow-2xl">
               <CanvasViewport
                 settings={settings}

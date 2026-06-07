@@ -367,7 +367,7 @@ export default function AnimatedMeshGradient() {
     return `// Paste custom class keys in tailwind.config.js inside animations section
 // Then style your markup directly!
 
-<div className="w-full h-screen bg-gradient-to-r from-[${gradient.stops[0]?.color ?? '#ff5e62'}] via-[${gradient.stops[1]?.color ?? '#ff2a85'}] to-[${gradient.stops[gradient.stops.length-1]?.color ?? '#ffbe3b'}] animate-gradient bg-[length:400%_400%] filter blur-[${gradient.blur}px] pointer-events-none opacity-90 transform scale-110">
+<div className="w-full h-screen bg-linear-to-r from-[${gradient.stops[0]?.color ?? '#ff5e62'}] via-[${gradient.stops[1]?.color ?? '#ff2a85'}] to-[${gradient.stops[gradient.stops.length-1]?.color ?? '#ffbe3b'}] animate-gradient bg-[length:400%_400%] filter blur-[${gradient.blur}px] pointer-events-none opacity-90 transform scale-110">
 </div>`;
   };
 

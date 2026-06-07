@@ -2341,11 +2341,11 @@ export default function SilkGenerator() {
   };
 
   return (
-    <div className="flex-grow w-full flex flex-col lg:flex-row min-h-0 bg-[#04060a] text-zinc-100 rounded-xl lg:overflow-hidden border border-white/5 shadow-3xl">
+    <div className="grow w-full flex flex-col lg:flex-row min-h-0 bg-[#04060a] text-zinc-100 rounded-xl lg:overflow-hidden border border-white/5 shadow-3xl">
       
       {/* Toast Alert Feedback */}
       {toastMessage && (
-        <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 bg-[#080d19] border border-violet-500/40 text-violet-300 text-[10px] font-mono tracking-widest uppercase px-4 py-2.5 rounded shadow-2xl flex items-center gap-2 animate-pulse rounded-full">
+        <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 bg-[#080d19] border border-violet-500/40 text-violet-300 text-[10px] font-mono tracking-widest uppercase px-4 py-2.5 shadow-2xl flex items-center gap-2 animate-pulse rounded-full">
           <Sparkles size={11} className="animate-spin text-fuchsia-400" />
           <span>{toastMessage}</span>
         </div>
@@ -2363,15 +2363,15 @@ export default function SilkGenerator() {
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleMouseUp}
-          className="flex-grow w-full relative overflow-hidden flex items-center justify-center bg-transparent select-none min-h-[350px] lg:min-h-0 shrink-0 lg:shrink"
+          className="grow w-full relative overflow-hidden flex items-center justify-center bg-transparent select-none min-h-87.5 lg:min-h-0 shrink-0 lg:shrink"
           style={{ cursor: mouseMode === 'drag' ? 'grab' : 'crosshair' }}
         >
-          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block z-[2] pointer-events-auto" />
+          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block z-2 pointer-events-auto" />
 
           {/* Frost Backdrop overlay filter for Ribbon (Silk Flow) */}
           {generatorMode === 'ribbon' && bgBlur > 0 && (
             <div 
-              className="absolute inset-0 pointer-events-none z-[1]"
+              className="absolute inset-0 pointer-events-none z-1"
               style={{
                 backdropFilter: `blur(${bgBlur}px)`,
                 WebkitBackdropFilter: `blur(${bgBlur}px)`,
@@ -2382,7 +2382,7 @@ export default function SilkGenerator() {
           {/* Smooth Backdrop overlay filter for Media Mesh */}
           {generatorMode === 'mediamesh' && meshBlur > 0 && (
             <div 
-              className="absolute inset-0 pointer-events-none z-[1]"
+              className="absolute inset-0 pointer-events-none z-1"
               style={{
                 backdropFilter: `blur(${meshBlur}px)`,
                 WebkitBackdropFilter: `blur(${meshBlur}px)`,
@@ -2392,18 +2392,18 @@ export default function SilkGenerator() {
 
           {/* Vignette Contrast Overlay */}
           {!isTransparentBg && (
-            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_45%,rgba(2,3,5,0.78)_100%)] z-[2]" />
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_45%,rgba(2,3,5,0.78)_100%)] z-2" />
           )}
 
           {/* Tech Metrics Label */}
-          <div className="absolute bottom-4 left-4 pointer-events-none bg-black/60 border border-white/5 backdrop-blur px-2.5 py-1 rounded text-[8px] font-mono text-zinc-500 uppercase tracking-widest z-[3]">
+          <div className="absolute bottom-4 left-4 pointer-events-none bg-black/60 border border-white/5 backdrop-blur px-2.5 py-1 rounded text-[8px] font-mono text-zinc-500 uppercase tracking-widest z-3">
             {generatorMode === 'ribbon' ? '3D Twisted Filament Studio' : `3D Scanned Mesh • ${gridDensity}x${gridDensity}`}
           </div>
         </div>
       </div>
 
       {/* Control Sidebar Panel */}
-      <div className="w-full lg:w-[350px] border-t lg:border-t-0 lg:border-l border-white/5 bg-[#06080d] flex flex-col lg:h-full shrink-0 shadow-2xl overflow-y-auto">
+      <div className="w-full lg:w-87.5 border-t lg:border-t-0 lg:border-l border-white/5 bg-[#06080d] flex flex-col lg:h-full shrink-0 shadow-2xl overflow-y-auto">
         
         {/* Rendering Mode selectors */}
         <div className="p-4 border-b border-white/5 bg-[#080b12] flex flex-col gap-3">
@@ -2418,7 +2418,7 @@ export default function SilkGenerator() {
               onClick={() => { setGeneratorMode('mediamesh'); showToast('Loaded creative mesh engine.'); }}
               className={`py-2 text-center text-[10px] font-mono font-bold uppercase tracking-wider rounded border cursor-pointer transition-all active:scale-95 ${
                 generatorMode === 'mediamesh'
-                  ? 'bg-gradient-to-r from-violet-600/20 to-fuchsia-600/20 border-violet-500 text-violet-200 shadow-lg shadow-violet-500/5'
+                  ? 'bg-linear-to-r from-violet-600/20 to-fuchsia-600/20 border-violet-500 text-violet-200 shadow-lg shadow-violet-500/5'
                   : 'bg-zinc-950 border-zinc-900 text-zinc-500 hover:text-zinc-300'
               }`}
             >
@@ -2428,7 +2428,7 @@ export default function SilkGenerator() {
               onClick={() => { setGeneratorMode('ribbon'); showToast('Loaded dynamic ribbons engine.'); }}
               className={`py-2 text-center text-[10px] font-mono font-bold uppercase tracking-wider rounded border cursor-pointer transition-all active:scale-95 ${
                 generatorMode === 'ribbon'
-                  ? 'bg-gradient-to-r from-violet-600/20 to-fuchsia-600/20 border-violet-500 text-violet-200 shadow-lg shadow-violet-500/5'
+                  ? 'bg-linear-to-r from-violet-600/20 to-fuchsia-600/20 border-violet-500 text-violet-200 shadow-lg shadow-violet-500/5'
                   : 'bg-zinc-950 border-zinc-900 text-zinc-500 hover:text-zinc-300'
               }`}
             >
@@ -2499,7 +2499,7 @@ export default function SilkGenerator() {
               
               {/* Premium 3D Theme Presets Selector */}
               <div className="flex flex-col gap-2 p-3 rounded-lg border border-violet-950/40 bg-zinc-950/70">
-                <span className="text-[9px] font-extrabold tracking-wider font-mono text-violet-400 uppercase leading-none block flex items-center gap-1">
+                <span className="text-[9px] font-extrabold tracking-wider font-mono text-violet-400 uppercase leading-none flex items-center gap-1">
                   <Sparkles size={11} className="text-pink-400 animate-pulse" /> Live Premium Theme Presets
                 </span>
                 <span className="text-[8px] text-zinc-500 leading-tight block">
@@ -2566,7 +2566,7 @@ export default function SilkGenerator() {
                   <div 
                     onDragOver={handleDragOver}
                     onDrop={handleDrop}
-                    className="border border-dashed border-zinc-800 rounded px-2 py-3 text-center text-[9px] text-zinc-500 flex flex-col items-center justify-center gap-1 hover:border-violet-500/35 transition-all text-center leading-tight cursor-pointer"
+                    className="border border-dashed border-zinc-800 rounded px-2 py-3 text-center text-[9px] text-zinc-500 flex flex-col items-center justify-center gap-1 hover:border-violet-500/35 transition-all leading-tight cursor-pointer"
                   >
                     <Upload size={12} className="text-zinc-600 animate-bounce" />
                     <span>Drag and drop image or video file here</span>
@@ -3178,7 +3178,7 @@ export default function SilkGenerator() {
               {/* Static Vector SVG download */}
               <button
                 onClick={handleExportSVG}
-                className="w-full py-2.5 px-3 bg-gradient-to-r from-pink-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 active:scale-95 text-white font-extrabold rounded text-[9px] tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl shadow-pink-600/15"
+                className="w-full py-2.5 px-3 bg-linear-to-r from-pink-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 active:scale-95 text-white font-extrabold rounded text-[9px] tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl shadow-pink-600/15"
               >
                 <Download size={12} />
                 Download Vector image (.SVG)
@@ -3214,7 +3214,7 @@ export default function SilkGenerator() {
               {/* Premium 3D Web Integration Copier Hub */}
               <button
                 onClick={() => { setShowCodeHub(true); setCodeHubTab('embed'); }}
-                className="w-full py-2.5 px-3 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-600 hover:from-violet-500 hover:via-indigo-500 hover:to-cyan-500 active:scale-95 text-white font-extrabold rounded text-[10px] tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl shadow-indigo-600/20"
+                className="w-full py-2.5 px-3 bg-linear-to-r from-violet-600 via-indigo-600 to-cyan-600 hover:from-violet-500 hover:via-indigo-500 hover:to-cyan-500 active:scale-95 text-white font-extrabold rounded text-[10px] tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl shadow-indigo-600/20"
               >
                 <Code size={13} className="text-cyan-300 animate-pulse" />
                 Open Code Embed Hub (WP / Webflow / HTML)
@@ -3256,7 +3256,7 @@ export default function SilkGenerator() {
 
       {/* --- PREMIUM WEB CODE EMBED HUB OVERLAY MODAL --- */}
       {showCodeHub && (
-        <div className="fixed inset-0 min-h-screen w-screen bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 min-h-screen w-screen bg-black/85 backdrop-blur-md z-9999 flex items-center justify-center p-4 overflow-y-auto">
           <div className="max-w-2xl w-full bg-zinc-950 border border-zinc-900 rounded-xl overflow-hidden shadow-2xl flex flex-col text-zinc-300 animate-in fade-in zoom-in-95 duration-200 text-left font-sans">
             
             {/* Header */}

@@ -1,5 +1,5 @@
 {
-  "name": "Twenty Design Studio",
+  "name": "CogniStudio",
   "description": "A high-end interactive creative studio featuring Source, Mosaic, Network, 3D Silk, and Organic Cell design engines.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

@@ -471,7 +471,7 @@ export default function GradientViewport({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-[32rem] md:h-full flex items-center justify-center overflow-hidden border border-white/10 rounded-xl bg-[#09080e] shadow-2xl group transition-all"
+      className="relative w-full h-128 md:h-full flex items-center justify-center overflow-hidden border border-white/10 rounded-xl bg-[#09080e] shadow-2xl group transition-all"
     >
       {/* Dynamic Blur Layer (Native smearing exactly like Stripe!) */}
       <div 

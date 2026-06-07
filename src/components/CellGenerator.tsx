@@ -1367,7 +1367,7 @@ export default function CellGenerator() {
       </AnimatePresence>
 
       {/* Canvas Viewport Stage */}
-      <div className="flex-1 relative min-h-[460px] lg:min-h-0 bg-[#000] rounded-xl overflow-hidden border border-white/10 group shadow-2xl">
+      <div className="flex-1 relative min-h-115 lg:min-h-0 bg-black rounded-xl overflow-hidden border border-white/10 group shadow-2xl">
         <canvas 
           ref={canvasRef} 
           onMouseMove={handleMouseMove}
@@ -1376,7 +1376,7 @@ export default function CellGenerator() {
         />
         
         {/* Dynamic Canvas HUD bar */}
-        <div className="absolute inset-x-0 bottom-0 p-8 pointer-events-none bg-gradient-to-t from-black/80 via-black/20 to-transparent animate-fade-in">
+        <div className="absolute inset-x-0 bottom-0 p-8 pointer-events-none bg-linear-to-t from-black/80 via-black/20 to-transparent animate-fade-in">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] font-bold text-white/40 uppercase tracking-[0.3em] font-mono">Organic Cell Workspace</span>
@@ -1396,7 +1396,7 @@ export default function CellGenerator() {
 
         {/* Liquid floating visual cursor glass lens */}
         <div 
-           className="fixed pointer-events-none z-[100] w-14 h-14 border border-white/30 rounded-full flex items-center justify-center mix-blend-difference opacity-0 transition-opacity duration-300 hidden lg:flex"
+           className="fixed pointer-events-none z-100 w-14 h-14 border border-white/30 rounded-full items-center justify-center mix-blend-difference opacity-0 transition-opacity duration-300 hidden lg:flex"
            id="cell-cursor"
            style={{ transform: 'translate(-50%, -50%)' }}
         >
@@ -1413,7 +1413,7 @@ export default function CellGenerator() {
           <motion.div 
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
-            className="w-full lg:w-[450px] shrink-0 flex flex-col bg-[#070707] border border-white/10 rounded-xl overflow-hidden shadow-3xl relative z-10"
+            className="w-full lg:w-112.5 shrink-0 flex flex-col bg-[#070707] border border-white/10 rounded-xl overflow-hidden shadow-3xl relative z-10"
           >
             {/* Control Panel Tab Hub */}
             <div className="flex p-2 bg-black/90 border-b border-white/10 h-16 items-center">
@@ -1441,7 +1441,7 @@ export default function CellGenerator() {
             </div>
 
             {/* Global Animation Controller Status */}
-            <div className="flex items-center justify-between px-8 py-4 bg-white/[0.02] border-b border-white/5 font-mono">
+            <div className="flex items-center justify-between px-8 py-4 bg-white/2 border-b border-white/5 font-mono">
               <span className="text-[10px] uppercase tracking-widest text-white/50 font-bold">Simulation Engine</span>
               <div className="flex items-center gap-3.5">
                 <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded tracking-wider ${isAnimate ? 'text-[#a3e635] bg-[#a3e635]/15 border border-[#a3e635]/20' : 'text-[#f87171] bg-[#f87171]/15 border border-[#f87171]/20'}`}>
@@ -1459,7 +1459,7 @@ export default function CellGenerator() {
               </div>
             </div>
 
-            <div className="flex-grow overflow-y-auto p-8 space-y-10 scrollbar-none max-h-[calc(100vh-220px)]">
+            <div className="grow overflow-y-auto p-8 space-y-10 scrollbar-none max-h-[calc(100vh-220px)]">
               
               {/* --- GEOMETRY TAB --- */}
               {activeTab === 'geometry' && (
@@ -1526,7 +1526,7 @@ export default function CellGenerator() {
                    </div>
 
                    {/* Sketched Hand-draw loops customizer */}
-                   <div className="space-y-4 bg-white/[0.02] p-5 rounded-xl border border-white/5">
+                   <div className="space-y-4 bg-white/2 p-5 rounded-xl border border-white/5">
                       <div className="flex items-center justify-between">
                          <span className="text-[10px] font-bold uppercase text-white/60 tracking-wider font-mono">Wobbly Sketch stroke</span>
                          <button 
@@ -1597,7 +1597,7 @@ export default function CellGenerator() {
                 <div className="space-y-8 animate-in fade-in duration-300">
                    
                    {/* Dream Interactive Presets (Derived directly from uploaded inspiration screenshots) */}
-                   <div className="space-y-4 bg-gradient-to-r from-yellow-400/10 via-indigo-500/10 to-transparent p-5 rounded-2xl border border-yellow-400/20 ring-1 ring-yellow-400/5">
+                   <div className="space-y-4 bg-linear-to-r from-yellow-400/10 via-indigo-500/10 to-transparent p-5 rounded-2xl border border-yellow-400/20 ring-1 ring-yellow-400/5">
                      <div className="flex items-center gap-2 font-mono">
                        <Sparkles size={14} className="text-yellow-400 animate-spin" />
                        <span className="text-[10px] font-bold uppercase text-white tracking-widest">Inspiration Presets</span>
@@ -1748,7 +1748,7 @@ export default function CellGenerator() {
                          setIsAnimate(false); 
                          showToast('Loaded: Category Bubbles (Image 5 & 6)');
                        }}
-                       className="w-full p-3.5 rounded-lg border bg-gradient-to-r from-yellow-400/25 to-yellow-500/5 border-yellow-400/30 hover:from-yellow-400/35 hover:to-yellow-500/10 text-white font-bold transition-all text-left flex flex-col justify-between h-20"
+                       className="w-full p-3.5 rounded-lg border bg-linear-to-r from-yellow-400/25 to-yellow-500/5 border-yellow-400/30 hover:from-yellow-400/35 hover:to-yellow-500/10 text-white font-bold transition-all text-left flex flex-col justify-between h-20"
                      >
                        <span className="text-yellow-400">05. GENRE CATEGORY PILLOW MAP</span>
                        <span className="text-[8px] text-white/30 uppercase font-normal font-sans">Images 5 & 6: Thick Black Channels + Nested Text Labels</span>
@@ -1791,7 +1791,7 @@ export default function CellGenerator() {
                            ))}
                         </div>
                       ) : (
-                        <div className="space-y-4 p-5 bg-white/[0.02] border border-white/5 rounded-xl animate-in zoom-in-95 duration-200">
+                        <div className="space-y-4 p-5 bg-white/2 border border-white/5 rounded-xl animate-in zoom-in-95 duration-200">
                           <div className="grid grid-cols-3 gap-3">
                             <div className="space-y-1.5">
                               <span className="text-[8px] font-mono text-white/30 block uppercase font-bold">Paper/Bg Color</span>
@@ -1943,10 +1943,10 @@ export default function CellGenerator() {
                 <div className="space-y-8 animate-in fade-in duration-300">
                    
                    {/* Dynamic Animation on/off parameter switch toggle */}
-                   <div className="flex items-center justify-between p-4.5 bg-white/[0.03] border border-white/5 rounded-xl">
+                   <div className="flex items-center justify-between p-4.5 bg-white/3 border border-white/5 rounded-xl">
                      <div className="flex flex-col gap-0.5 font-mono">
                        <span className="text-[10px] font-bold uppercase tracking-wider text-yellow-400">Simulation Flow</span>
-                       <span className="text-[8px] text-white/30 uppercase tracking-[0.05em]">Toggle cellular physics math processing</span>
+                       <span className="text-[8px] text-white/30 uppercase tracking-wider">Toggle cellular physics math processing</span>
                      </div>
                      <button 
                        onClick={() => setIsAnimate(!isAnimate)} 
@@ -2121,7 +2121,7 @@ export default function CellGenerator() {
                        <div className="flex items-center justify-between p-4 bg-black/30 border border-white/5 rounded-lg font-mono">
                          <div className="flex flex-col gap-0.5">
                            <span className="text-[9px] font-bold uppercase text-white/40">Inverse concave depression</span>
-                           <span className="text-[7.5px] text-white/35 uppercase tracking-[0.05em]">Tiles SINK INWARD instead of RISING UP (Concave Image 4)</span>
+                           <span className="text-[7.5px] text-white/35 uppercase tracking-wider">Tiles SINK INWARD instead of RISING UP (Concave Image 4)</span>
                          </div>
                          <button 
                            onClick={() => setHoverIsSinking(!hoverIsSinking)} 
@@ -2172,7 +2172,7 @@ export default function CellGenerator() {
               {/* --- EXPORT TAB --- */}
               {activeTab === 'export' && (
                 <div className="space-y-8 animate-in inline-fade-in duration-500">
-                   <div className="bg-gradient-to-br from-yellow-400/20 via-indigo-500/10 to-transparent p-8 rounded-2xl border border-yellow-400/20 space-y-8 text-center ring-1 ring-yellow-400/10 relative overflow-hidden group">
+                   <div className="bg-linear-to-br from-yellow-400/20 via-indigo-500/10 to-transparent p-8 rounded-2xl border border-yellow-400/20 space-y-8 text-center ring-1 ring-yellow-400/10 relative overflow-hidden group">
                       <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-10 transition-opacity" />
                       <div className="space-y-4 relative">
                         <motion.div 
@@ -2185,7 +2185,7 @@ export default function CellGenerator() {
                         </motion.div>
                         <div className="space-y-2">
                            <h4 className="text-lg font-bold text-white tracking-tight">Save Artwork</h4>
-                           <p className="text-[9px] text-white/40 font-mono leading-relaxed px-4 uppercase tracking-[0.1em]">Lossless vectors and raster capture with wobbly sketch features intact.</p>
+                           <p className="text-[9px] text-white/40 font-mono leading-relaxed px-4 uppercase tracking-widest">Lossless vectors and raster capture with wobbly sketch features intact.</p>
                         </div>
                       </div>
                       

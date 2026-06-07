@@ -1992,77 +1992,8 @@ export default function StandaloneHalftoneViewer() {
                   </div>
                 </div>
 
-                {/* 3D Shapes Interactive Visual Preset Grid */}
-                <div className="flex flex-col gap-2 mt-1.5 p-3.5 bg-zinc-950/60 rounded-xl border border-zinc-900/40">
-                  <div className="flex items-center justify-between text-[8px] text-zinc-500 tracking-wider font-mono font-bold uppercase select-none">
-                    <span>Interactive 3D Shape Grid</span>
-                    <span className="text-indigo-400 font-bold">({settings.sourceMode === 'shape' ? settings.shapeKey.toUpperCase() : 'NONE'})</span>
-                  </div>
-                  
-                  <div className="grid grid-cols-4 gap-1.5 max-h-[145px] overflow-y-auto custom-scrollbar pt-1 pr-0.5">
-                    {[
-                      { key: 'star', label: 'Star', icon: '⭐' },
-                      { key: 'heart', label: 'Heart', icon: '❤️' },
-                      { key: 'gem', label: 'Gem', icon: '💎' },
-                      { key: 'diamond', label: 'Diamond', icon: '💠' },
-                      { key: 'ring', label: 'Ring', icon: '💍' },
-                      { key: 'capsule', label: 'Capsule', icon: '💊' },
-                      { key: 'cross', label: 'Cross', icon: '➕' },
-                      { key: 'arrow', label: 'Arrow', icon: '⬆️' },
-                      { key: 'torusKnot', label: 'Torus Knot', icon: '➰' },
-                      { key: 'sphere', label: 'Sphere', icon: '⚪' },
-                      { key: 'torus', label: 'Torus', icon: '🍩' },
-                      { key: 'icosahedron', label: 'Icosahedron', icon: '💎' },
-                      { key: 'box', label: 'Cube', icon: '📦' },
-                      { key: 'cone', label: 'Cone', icon: '🔺' },
-                      { key: 'cylinder', label: 'Cylinder', icon: '🔋' },
-                      { key: 'octahedron', label: 'Octahedron', icon: '🔶' },
-                      { key: 'dodecahedron', label: 'Dodeca', icon: '🛑' },
-                      { key: 'tetrahedron', label: 'Tetra', icon: '🔺' },
-                      { key: 'sunCoin', label: 'Sun Coin', icon: '🪙' },
-                      { key: 'lotusCoin', label: 'Lotus Coin', icon: '🌸' },
-                      { key: 'arrowTarget', label: 'Target', icon: '🎯' },
-                      { key: 'dollarCoin', label: 'Dollar Coin', icon: '💰' },
-                      { key: 'faceted-sphere', label: 'Faceted', icon: '🔮' },
-                      { key: 'bubble-sphere', label: 'Bubbles', icon: '🫧' },
-                      { key: 'exploding-cube', label: 'Explosion', icon: '💥' },
-                      { key: 'sliced-sphere', label: 'Sliced', icon: '🥞' },
-                      { key: 'particle-cloud', label: 'Particles', icon: '✨' },
-                      { key: 'wavy-sphere', label: 'Wavy', icon: '🧠' },
-                      { key: 'layered-sphere', label: 'Layered', icon: '🧅' },
-                      { key: 'molecular-sphere', label: 'Molecular', icon: '🧪' },
-                      { key: '3d-jack', label: '3D Jack', icon: '✨' },
-                      { key: 'wooden-puzzle', label: 'Puzzle', icon: '🧩' },
-                      { key: 'city-blocks', label: 'City', icon: '🏢' },
-                      { key: 'puffy-cube', label: 'Puffy', icon: '☁️' },
-                      { key: 'gears', label: 'Gears', icon: '⚙️' },
-                      { key: 'crater-moon', label: 'Moon', icon: '🌑' },
-                      { key: 'hollow-dodeca', label: 'Hollow', icon: '💠' },
-                      { key: 'grooved-cube', label: 'Grooved', icon: '🧊' }
-                    ].map((shapeItem) => {
-                      const isSelected = settings.sourceMode === 'shape' && settings.shapeKey === shapeItem.key;
-                      return (
-                        <button
-                          key={shapeItem.key}
-                          type="button"
-                          onClick={() => {
-                            updateSetting('sourceMode', 'shape');
-                            updateSetting('shapeKey', shapeItem.key);
-                          }}
-                          className={`p-1.5 rounded-lg flex flex-col items-center justify-center gap-1 cursor-pointer transition-all border text-center active:scale-95 ${
-                            isSelected
-                              ? 'bg-indigo-950/50 border-indigo-500/80 text-indigo-300 shadow-md shadow-indigo-950/40'
-                              : 'bg-zinc-950/30 border-zinc-900/60 hover:border-zinc-800 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-950/50'
-                          }`}
-                          title={`Switch 3D rendering to ${shapeItem.label}`}
-                        >
-                          <span className="text-sm select-none leading-none pt-0.5">{shapeItem.icon}</span>
-                          <span className="text-[7px] font-sans font-extrabold leading-none uppercase truncate w-full">{shapeItem.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+
+
 
                 {/* Modifiers for Parametric Design */}
                 {settings.sourceMode === 'shape' && (
@@ -2216,7 +2147,7 @@ export default function StandaloneHalftoneViewer() {
                       </div>
 
                       <div className="flex flex-col gap-2.5 p-3.5 mt-2 bg-indigo-950/10 border border-indigo-900/30 rounded-xl relative overflow-hidden group">
-                        <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent"></div>
+                        <div className="absolute inset-x-0 top-0 h-[1px] bg-linear-to-r from-transparent via-indigo-500/20 to-transparent"></div>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Sparkles size={11} className="text-indigo-400" />

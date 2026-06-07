@@ -1470,7 +1470,7 @@ export default function AnimatedNetworkWidget() {
   return (
     <div 
       ref={containerRef} 
-      className="w-full h-full min-h-[300px] relative overflow-hidden" 
+      className="w-full h-full min-h-75 relative overflow-hidden" 
       style={{ backgroundColor: "${backgroundColor}" }}
     >
       <svg 
@@ -2548,7 +2548,7 @@ export default function AnimatedNetworkWidget() {
         {/* Live Vector SVG sandbox area rendering nodes, wire connectors and computed intersections */}
         <div 
           ref={containerRef}
-          className="flex-grow w-full relative overflow-hidden flex items-center justify-center select-none p-2 lg:p-4 min-h-[400px] lg:min-h-0 shrink-0 lg:shrink"
+          className="flex-grow w-full relative overflow-hidden flex items-center justify-center select-none p-2 lg:p-4 min-h-100 lg:min-h-0 shrink-0 lg:shrink"
         >
           <div 
             className="relative shadow-2xl overflow-hidden rounded border border-white/5 transition-all duration-300 flex items-center justify-center"

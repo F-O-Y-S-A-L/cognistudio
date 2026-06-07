@@ -26,7 +26,7 @@ export default function PreviewHeader({ onUndo, onRedo, settings, onChange, acti
             <Sliders size={16} className="text-white animate-pulse" />
           </div>
           <div>
-            <h1 className="text-sm font-bold tracking-widest text-[#e0e0e0] font-mono uppercase">TWENTY</h1>
+            <h1 className="text-sm font-bold tracking-widest text-[#e0e0e0] font-mono uppercase">CogniStudio</h1>
           </div>
         </div>
         

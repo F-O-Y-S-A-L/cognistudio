@@ -1579,7 +1579,7 @@ export default function MosaicHalftone() {
   };
 
   return (
-    <div className="flex-grow flex flex-col lg:flex-row lg:overflow-hidden min-h-0 bg-[#050505]" id="mosaic-studio-main-viewport">
+    <div className="grow flex flex-col lg:flex-row lg:overflow-hidden min-h-0 bg-[#050505]" id="mosaic-studio-main-viewport">
       
       {/* LEFT AREA: Canvas Display Workspace */}
       <div className="w-full h-[60vh] lg:h-full lg:flex-1 p-0 lg:p-6 flex flex-col gap-4 relative min-w-0 overflow-hidden shrink-0 lg:shrink" id="mosaic-canvas-area-wrapper">
@@ -1592,7 +1592,7 @@ export default function MosaicHalftone() {
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`flex-1 w-full flex items-center justify-center relative transition-all duration-300 overflow-auto custom-scrollbar bg-[#050505] p-2 lg:p-6 min-h-[400px] lg:min-h-0 shrink-0 lg:shrink ${
+          className={`flex-1 w-full flex items-center justify-center relative transition-all duration-300 overflow-auto custom-scrollbar bg-[#050505] p-2 lg:p-6 min-h-100 lg:min-h-0 shrink-0 lg:shrink ${
             dragActive 
               ? 'border border-dashed border-indigo-500 bg-indigo-950/20' 
               : 'border-none bg-transparent'
@@ -1658,10 +1658,10 @@ export default function MosaicHalftone() {
       </div>
 
       {/* RIGHT SIDEBAR: Creative Customizer Controls with independent scrollbar */}
-      <div className="w-full lg:w-[360px] bg-[#0a0a0c] border-t lg:border-t-0 lg:border-l border-white/10 flex flex-col min-h-0 relative select-none lg:h-full overflow-hidden shrink-0" id="mosaic-sidebar-panel">
+      <div className="w-full lg:w-90 bg-[#0a0a0c] border-t lg:border-t-0 lg:border-l border-white/10 flex flex-col min-h-0 relative select-none lg:h-full overflow-hidden shrink-0" id="mosaic-sidebar-panel">
         
         {/* PANEL TITLE */}
-        <div className="p-4 border-b border-white/5 bg-[#0a0a0d] flex flex-shrink-0 items-center justify-between gap-2 shadow-sm z-10">
+        <div className="p-4 border-b border-white/5 bg-[#0a0a0d] flex shrink-0 items-center justify-between gap-2 shadow-sm z-10">
           <div className="flex items-center gap-2">
             <Sparkles className="text-yellow-500 animate-pulse" size={14} />
             <span className="font-mono text-[11px] uppercase font-bold tracking-widest text-white/95">
@@ -1822,7 +1822,7 @@ export default function MosaicHalftone() {
                   }} 
                   className="sr-only peer"
                 />
-                <div className="w-8 h-4 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-zinc-400 after:border-zinc-350 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white"></div>
+                <div className="w-8 h-4 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-zinc-400 after:border-zinc-350 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white"></div>
               </label>
             </div>
 
