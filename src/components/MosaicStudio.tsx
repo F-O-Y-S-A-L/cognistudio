@@ -199,8 +199,11 @@ export default function MosaicStudio() {
 
   // States for Video Recording
   const [isRecording, setIsRecording] = useState(false);
+  const [videoQuality, setVideoQuality] = useState<'720' | '1080' | '1440' | '2160'>('1080');
+  const [videoDuration, setVideoDuration] = useState<number>(20);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingTimeoutRef = useRef<any>(null);
 
   // States
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -217,6 +220,8 @@ export default function MosaicStudio() {
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const sourceImageRef = useRef<HTMLImageElement | null>(null);
   const sourceVideoRef = useRef<HTMLVideoElement | null>(null);
+  const isRecordingHighResRef = useRef(false);
+  const recordingScaleRef = useRef(15000000);
 
   // Default Image Seed on Mount
   useEffect(() => {
@@ -398,8 +403,12 @@ export default function MosaicStudio() {
     const paddingX = radialDispersion > 0 ? radialDispersion * 3 : 0;
     const paddingY = radialDispersion > 0 ? radialDispersion * 3 : 0;
 
-    canvas.width = targetWidth + paddingX * 2;
-    canvas.height = targetHeight + paddingY * 2;
+    const originalWidth = targetWidth + paddingX * 2;
+    const originalHeight = targetHeight + paddingY * 2;
+    const scale = isRecordingHighResRef.current ? recordingScaleRef.current : 1.0;
+
+    canvas.width = originalWidth * scale;
+    canvas.height = originalHeight * scale;
 
     const stepSize = Math.max(1, dotSize + spacing);
     const cols = Math.max(1, Math.ceil(targetWidth / stepSize));
@@ -440,6 +449,7 @@ export default function MosaicStudio() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     } else if (bgStyle === 'blurred') {
       ctx.save();
+      ctx.scale(scale, scale);
       // Translate to draw blurred background in center
       ctx.translate(paddingX, paddingY);
       ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
@@ -450,13 +460,14 @@ export default function MosaicStudio() {
 
     // Set up glow styling if enabled (using canvas shadow attributes)
     if (glowStrength > 0) {
-      ctx.shadowBlur = glowStrength * 3;
+      ctx.shadowBlur = glowStrength * 3 * scale;
     } else {
       ctx.shadowBlur = 0;
     }
 
-    // Move drawing origin to the padded center for dots
+    // Move drawing origin to the padded center for dots and apply upscaling context transformations
     ctx.save();
+    ctx.scale(scale, scale);
     ctx.translate(paddingX, paddingY);
 
     const contrastFactor = (259 * (contrast + 255)) / (255 * (259 - contrast));
@@ -993,31 +1004,82 @@ export default function MosaicStudio() {
   // Recording functionality
   const toggleRecording = () => {
     if (isRecording) {
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
+      }
       mediaRecorderRef.current?.stop();
       setIsRecording(false);
     } else {
       const canvas = mainCanvasRef.current;
       if (!canvas) return;
+
+      const img = sourceVideoRef.current || sourceImageRef.current;
+      const vWidth = img ? ((img as HTMLVideoElement).videoWidth || (img as HTMLImageElement).width || 640) : 640;
+      const vHeight = img ? ((img as HTMLVideoElement).videoHeight || (img as HTMLImageElement).height || 640) : 640;
+      const targetWidth = 640;
+      const rawRatio = vHeight / (vWidth || 1);
+      const targetHeight = Math.max(120, Math.min(800, Math.floor(targetWidth * rawRatio)));
+      const paddingY = radialDispersion > 0 ? radialDispersion * 3 : 0;
+      const baseHeight = targetHeight + paddingY * 2;
+      
+      const targetHeightPreset = parseInt(videoQuality);
+      const scale = targetHeightPreset / baseHeight;
+
+      isRecordingHighResRef.current = true;
+      recordingScaleRef.current = scale;
+      renderMosaic(); // Re-render at high resolution
+
       recordedChunksRef.current = [];
       try {
         const stream = canvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+        // Compute high-bitrate targeting to prevent compression artifacts (720p: 6M, 1080p: 15M, 2K: 25M, 4K: 50M)
+        let bBps = 15000000;
+        if (videoQuality === '720') bBps = 6000000;
+        else if (videoQuality === '1440') bBps = 25000000;
+        else if (videoQuality === '2160') bBps = 50000000;
+
+        let options = { 
+          mimeType: 'video/webm;codecs=vp9,opus', 
+          videoBitsPerSecond: bBps 
+        };
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+          options = { 
+            mimeType: 'video/webm', 
+            videoBitsPerSecond: bBps 
+          };
+        }
+
+        const recorder = new MediaRecorder(stream, options);
         recorder.ondataavailable = (e) => {
           if (e.data.size > 0) recordedChunksRef.current.push(e.data);
         };
         recorder.onstop = () => {
+          isRecordingHighResRef.current = false;
+          renderMosaic(); // Restore visual baseline resolution
+          setIsRecording(false);
+
           const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
-          link.download = `mosaic-pix-dot-studio-${Date.now()}.webm`;
+          link.download = `mosaic-pix-dot-studio-${videoQuality}p-${videoDuration}s-${Date.now()}.webm`;
           link.click();
-          triggerToast('Success: Exported mosaic video successfully!');
+          triggerToast(`Success: Exported high-fidelity ${videoQuality}p mosaic video successfully!`);
         };
         recorder.start();
         mediaRecorderRef.current = recorder;
         setIsRecording(true);
-        triggerToast('Recording started: Capturing mosaic output...');
+        triggerToast(`Recording started: Capturing mosaic in ${videoQuality}p for ${videoDuration}s with ${Math.round(bBps / 1000000)}Mbps Bitrate...`);
+
+        // Enforce dynamic clip duration limit
+        recordingTimeoutRef.current = setTimeout(() => {
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+          }
+        }, videoDuration * 1000);
       } catch (err) {
         triggerToast('Error: Recording not supported in this browser environment.');
       }
@@ -1579,7 +1641,7 @@ export default function MosaicHalftone() {
   };
 
   return (
-    <div className="grow flex flex-col lg:flex-row lg:overflow-hidden min-h-0 bg-[#050505]" id="mosaic-studio-main-viewport">
+    <div className="flex-grow flex flex-col lg:flex-row lg:overflow-hidden min-h-0 bg-[#050505]" id="mosaic-studio-main-viewport">
       
       {/* LEFT AREA: Canvas Display Workspace */}
       <div className="w-full h-[60vh] lg:h-full lg:flex-1 p-0 lg:p-6 flex flex-col gap-4 relative min-w-0 overflow-hidden shrink-0 lg:shrink" id="mosaic-canvas-area-wrapper">
@@ -1658,10 +1720,10 @@ export default function MosaicHalftone() {
       </div>
 
       {/* RIGHT SIDEBAR: Creative Customizer Controls with independent scrollbar */}
-      <div className="w-full lg:w-90 bg-[#0a0a0c] border-t lg:border-t-0 lg:border-l border-white/10 flex flex-col min-h-0 relative select-none lg:h-full overflow-hidden shrink-0" id="mosaic-sidebar-panel">
+      <div className="w-full lg:w-[360px] bg-[#0a0a0c] border-t lg:border-t-0 lg:border-l border-white/10 flex flex-col min-h-0 relative select-none lg:h-full overflow-hidden shrink-0" id="mosaic-sidebar-panel">
         
         {/* PANEL TITLE */}
-        <div className="p-4 border-b border-white/5 bg-[#0a0a0d] flex shrink-0 items-center justify-between gap-2 shadow-sm z-10">
+        <div className="p-4 border-b border-white/5 bg-[#0a0a0d] flex flex-shrink-0 items-center justify-between gap-2 shadow-sm z-10">
           <div className="flex items-center gap-2">
             <Sparkles className="text-yellow-500 animate-pulse" size={14} />
             <span className="font-mono text-[11px] uppercase font-bold tracking-widest text-white/95">
@@ -1709,20 +1771,44 @@ export default function MosaicHalftone() {
               <button
                 id="btn-download-high-res-artwork"
                 onClick={handleDownload}
-                className="col-span-1 p-2 bg-[#4A38F5] hover:bg-[#3b2bc7] text-white font-mono text-[10px] rounded uppercase tracking-widest font-bold flex items-center justify-center gap-1.5 shadow-md shadow-[#4A38F5]/25 border border-white/5 cursor-pointer"
+                className="col-span-2 p-2 bg-[#4A38F5] hover:bg-[#3b2bc7] text-white font-mono text-[10px] rounded uppercase tracking-widest font-bold flex items-center justify-center gap-1.5 shadow-md shadow-[#4A38F5]/25 border border-white/5 cursor-pointer"
               >
                 <Download size={12} />
-                PNG
+                PNG Frame (.PNG)
               </button>
 
-              <button
-                id="btn-download-svg-artwork"
-                onClick={handleDownloadSVG}
-                className="col-span-1 p-2 bg-[#ff5500] hover:bg-[#d94800] text-white font-mono text-[10px] rounded uppercase tracking-widest font-bold flex items-center justify-center gap-1.5 shadow-md shadow-[#ff5500]/25 border border-white/5 cursor-pointer"
-              >
-                <Layers size={11} />
-                SVG
-              </button>
+              <div className="col-span-1 flex flex-col gap-1 my-1">
+                <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">WebM Resolution</label>
+                <select
+                  value={videoQuality}
+                  onChange={(e) => setVideoQuality(e.target.value as any)}
+                  className="w-full bg-zinc-900 border border-white/10 rounded py-1 px-2 text-[9px] text-zinc-300 font-mono focus:outline-none focus:border-[#4A38F5] cursor-pointer"
+                >
+                  <option value="720">720p (HD)</option>
+                  <option value="1080">1080p (FHD)</option>
+                  <option value="1440">1440p (2K)</option>
+                  <option value="2160">2160p (4K)</option>
+                </select>
+              </div>
+
+              <div className="col-span-1 flex flex-col gap-1 my-1">
+                <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">Duration</label>
+                <select
+                  value={videoDuration}
+                  onChange={(e) => setVideoDuration(parseInt(e.target.value))}
+                  className="w-full bg-zinc-900 border border-white/10 rounded py-1 px-2 text-[9px] text-zinc-300 font-mono focus:outline-none focus:border-[#4A38F5] cursor-pointer"
+                >
+                  <option value="3">3s</option>
+                  <option value="10">10s</option>
+                  <option value="20">20s (Default)</option>
+                  <option value="30">30s</option>
+                  <option value="60">1m</option>
+                  <option value="120">2m</option>
+                  <option value="180">3m</option>
+                  <option value="240">4m</option>
+                  <option value="300">5m</option>
+                </select>
+              </div>
 
               <button
                 id="btn-toggle-video-recording"
@@ -1822,7 +1908,7 @@ export default function MosaicHalftone() {
                   }} 
                   className="sr-only peer"
                 />
-                <div className="w-8 h-4 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-zinc-400 after:border-zinc-350 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white"></div>
+                <div className="w-8 h-4 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-zinc-400 after:border-zinc-350 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white"></div>
               </label>
             </div>
 

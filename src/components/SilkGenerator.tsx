@@ -118,12 +118,18 @@ export default function SilkGenerator() {
   const videoElRef = useRef<HTMLVideoElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedBlobsRef = useRef<Blob[]>([]);
+  const isRecordingHighResRef = useRef(false);
+  const recordingScaleRef = useRef(1);
   const animationFrameId = useRef<number | null>(null);
   const timeRef = useRef<number>(0);
   const mouseRef = useRef({ x: 0.5, y: 0.5, targetX: 0.5, targetY: 0.5 });
   const isDraggingRef = useRef(false);
   const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording' | 'finished'>('idle');
+  const [videoQuality, setVideoQuality] = useState<'720' | '1080' | '1440' | '2160'>('1080');
+  const [videoDuration, setVideoDuration] = useState<number>(20);
   const [copiableEmbed, setCopiableEmbed] = useState<boolean>(false);
+  const [copiedSvg, setCopiedSvg] = useState<boolean>(false);
+  const [copiedWidget, setCopiedWidget] = useState<boolean>(false);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -784,6 +790,7 @@ export default function SilkGenerator() {
     if (!ctx) return;
 
     const resizeObserver = new ResizeObserver((entries) => {
+      if (isRecordingHighResRef.current) return;
       for (let entry of entries) {
         canvas.width = Math.max(entry.contentRect.width, 350);
         canvas.height = Math.max(entry.contentRect.height, 350);
@@ -805,16 +812,20 @@ export default function SilkGenerator() {
         timeRef.current += deltaTime * 0.002 * speed;
       }
 
-      const w = canvas.width;
-      const h = canvas.height;
+      const w = containerRef.current?.clientWidth || canvas.width;
+      const h = containerRef.current?.clientHeight || canvas.height;
 
       // Draw background
       if (isTransparentBg) {
-        ctx.clearRect(0, 0, w, h);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
       } else {
         ctx.fillStyle = backgroundColor;
-        ctx.fillRect(0, 0, w, h);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
+
+      const renderScale = isRecordingHighResRef.current ? recordingScaleRef.current : 1.0;
+      ctx.save();
+      ctx.scale(renderScale, renderScale);
 
       // --- RENDERING SCENE 1: THREE-DIMENSIONAL SILK RIBBONS ---
       if (generatorMode === 'ribbon') {
@@ -1455,6 +1466,8 @@ export default function SilkGenerator() {
         }
       }
 
+      ctx.restore(); // Restore scaled context
+
       animationFrameId.current = requestAnimationFrame(render);
     };
 
@@ -1546,55 +1559,108 @@ export default function SilkGenerator() {
     if (file) processFile(file);
   };
 
-  // --- DOWNLOAD STATIC VECTOR SVG ---
-  const handleExportSVG = () => {
+  // --- GENERATE FULLY ANIMATED SMOOTH LOOPING VECTOR SVG ---
+  const generateDynamicSVGString = (): string => {
     const w = 960;
     const h = 640;
     const opacityFactor = opacity;
-    const uniqueId = Date.now();
     let svgMiddle = '';
 
     if (generatorMode === 'ribbon') {
-      showToast('Compiling Ribbon Vector layers. Please wait...');
       const stepsCount = 65;
       const ribbonsStrArray: string[] = [];
+
+      // Loop duration: Ribbon wave period with angular frequency 1.5 is:
+      // T = (2 * Math.PI) / 1.5 ≈ 4.18879
+      const activeSpeed = speed || 0.1 || 1.0;
+      const period = (2 * Math.PI) / 1.5;
+      const sampleTimes = animate 
+        ? [
+            timeRef.current,
+            timeRef.current + period * 0.25,
+            timeRef.current + period * 0.50,
+            timeRef.current + period * 0.75
+          ]
+        : [timeRef.current];
+
+      const durationSec = (period / activeSpeed).toFixed(2) + 's';
 
       for (let rIdx = 0; rIdx < numRibbons; rIdx++) {
         const settings = ribbons[rIdx % ribbons.length] || ribbons[0];
         const stripeCount = Math.min(25, shadingDetail);
-        const pts: { x: number; y: number; normalX: number; normalY: number; twist: number }[] = [];
-
-        for (let s = 0; s <= stepsCount; s++) {
-          const t = s / stepsCount;
-          const x = -150 + t * (w + 300);
-          const phaseOffset = rIdx * (Math.PI / 2.3) + settings.twistPhase;
-          const sine = Math.sin(timeRef.current * 1.5 + x * 0.0035 * waveFrequency + phaseOffset) * waveIntensity;
-          const y = h * 0.5 + sine;
-
-          const lookY = h * 0.5 + Math.sin(timeRef.current * 1.5 + (x + 1.0) * 0.0035 * waveFrequency + phaseOffset) * waveIntensity;
-          const tangent = Math.atan2(lookY - y, 1.0);
-          const normalX = -Math.sin(tangent);
-          const normalY = Math.cos(tangent);
-          const twistAngle = timeRef.current * twistSpeed + (x * 0.004 * twistRate) + phaseOffset;
-
-          pts.push({ x, y, normalX, normalY, twist: twistAngle });
-        }
 
         for (let f = 0; f < stripeCount; f++) {
           const normFilament = (f / (stripeCount - 1)) - 0.5;
           const dCenter = Math.abs(normFilament);
-          let pathPoints = '';
 
-          for (let p = 0; p < pts.length; p++) {
-            const pt = pts[p];
-            const projection = Math.cos(pt.twist + normFilament * Math.PI);
-            const curHalfWidth = (thickness * 0.5) * projection;
-            const extX = (pt.x + pt.normalX * curHalfWidth).toFixed(1);
-            const extY = (pt.y + pt.normalY * curHalfWidth).toFixed(1);
-            
-            if (p === 0) pathPoints += `M ${extX} ${extY}`;
-            else pathPoints += ` L ${extX} ${extY}`;
-          }
+          const pathDFrames: string[] = [];
+
+          // Precompute path strings for multiple frames to morph smoothly
+          sampleTimes.forEach((tVal) => {
+            const pts: { x: number; y: number; normalX: number; normalY: number; twist: number }[] = [];
+            for (let s = 0; s <= stepsCount; s++) {
+              const t = s / stepsCount;
+              const x = -150 + t * (w + 300);
+              const phaseOffset = rIdx * (Math.PI / 2.3) + settings.twistPhase;
+              
+              let sine = 0;
+              const fx1 = 0.0035 * waveFrequency;
+              const fx2 = 0.0015 * waveFrequency;
+
+              if (wavePattern === 'turbulent') {
+                sine = 
+                  Math.sin(tVal * 2.8 + x * fx1 * 2.2 + phaseOffset) * waveIntensity * 0.8 +
+                  Math.cos(tVal * 1.8 + x * fx2 * 2.5 + rIdx * 1.7) * (waveIntensity * 0.35);
+              } else if (wavePattern === 'spiral') {
+                sine = Math.sin(tVal * 1.5 - x * fx1 * 1.4 + phaseOffset * 1.5) * waveIntensity;
+              } else if (wavePattern === 'sea_swell') {
+                sine = Math.sin(tVal * 0.7 + x * fx1 * 0.6 + phaseOffset) * waveIntensity * 1.3;
+              } else {
+                sine = 
+                  Math.sin(tVal * 1.5 + x * fx1 + phaseOffset) * waveIntensity +
+                  Math.cos(tVal * 0.82 + x * fx2 + rIdx * 1.2) * (waveIntensity * 0.4);
+              }
+
+              const y = h * 0.5 + sine;
+
+              const lookX = x + 1.0;
+              let lookSine = 0;
+              if (wavePattern === 'turbulent') {
+                lookSine = 
+                  Math.sin(tVal * 2.8 + lookX * fx1 * 2.2 + phaseOffset) * waveIntensity * 0.8 +
+                  Math.cos(tVal * 1.8 + lookX * fx2 * 2.5 + rIdx * 1.7) * (waveIntensity * 0.35);
+              } else if (wavePattern === 'spiral') {
+                lookSine = Math.sin(tVal * 1.5 - lookX * fx1 * 1.4 + phaseOffset * 1.5) * waveIntensity;
+              } else if (wavePattern === 'sea_swell') {
+                lookSine = Math.sin(tVal * 0.7 + lookX * fx1 * 0.6 + phaseOffset) * waveIntensity * 1.3;
+              } else {
+                lookSine = 
+                  Math.sin(tVal * 1.5 + lookX * fx1 + phaseOffset) * waveIntensity +
+                  Math.cos(tVal * 0.82 + lookX * fx2 + rIdx * 1.2) * (waveIntensity * 0.4);
+              }
+              const lookY = h * 0.5 + lookSine;
+
+              const tangent = Math.atan2(lookY - y, 1.0);
+              const normalX = -Math.sin(tangent);
+              const normalY = Math.cos(tangent);
+              const twistAngle = tVal * twistSpeed + (x * 0.004 * twistRate) + phaseOffset;
+
+              pts.push({ x, y, normalX, normalY, twist: twistAngle });
+            }
+
+            let pathPoints = '';
+            for (let pIdx = 0; pIdx < pts.length; pIdx++) {
+              const pt = pts[pIdx];
+              const projection = Math.cos(pt.twist + normFilament * Math.PI);
+              const curHalfWidth = (thickness * 0.5) * projection;
+              const extX = (pt.x + pt.normalX * curHalfWidth).toFixed(1);
+              const extY = (pt.y + pt.normalY * curHalfWidth).toFixed(1);
+              
+              if (pIdx === 0) pathPoints += `M ${extX} ${extY}`;
+              else pathPoints += ` L ${extX} ${extY}`;
+            }
+            pathDFrames.push(pathPoints);
+          });
 
           const lightIncidence = Math.cos(normFilament * Math.PI * 1.2);
           const shadowFactor = 0.35 + 0.65 * (1.0 - dCenter * 1.8);
@@ -1606,13 +1672,22 @@ export default function SilkGenerator() {
           const g = Math.min(255, Math.max(0, Math.round((colS.g + (colE.g - colS.g) * 0.5) * shadowFactor + specular * 240)));
           const bColors = Math.min(255, Math.max(0, Math.round((colS.b + (colE.b - colS.b) * 0.5) * shadowFactor + specular * 240)));
 
-          ribbonsStrArray.push(`  <path d="${pathPoints}" fill="none" stroke="rgb(${r},${g},${bColors})" stroke-width="${((thickness / stripeCount) * 2.8).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacityFactor}" />`);
+          const strokeColorStr = `rgb(${r},${g},${bColors})`;
+          const strokeWidthVal = ((thickness / stripeCount) * 2.8).toFixed(1);
+
+          if (animate && pathDFrames.length > 1) {
+            ribbonsStrArray.push(`  <path d="${pathDFrames[0]}" fill="none" stroke="${strokeColorStr}" stroke-width="${strokeWidthVal}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacityFactor}">
+    <animate attributeName="d" dur="${durationSec}" repeatCount="indefinite" values="${pathDFrames.join('; ')}; ${pathDFrames[0]}" />
+  </path>`);
+          } else {
+            ribbonsStrArray.push(`  <path d="${pathDFrames[0]}" fill="none" stroke="${strokeColorStr}" stroke-width="${strokeWidthVal}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacityFactor}" />`);
+          }
         }
       }
       svgMiddle = ribbonsStrArray.join('\n');
 
     } else {
-      showToast('Compiling Transparent 3D Mesh vectors...');
+      // Mesh Mode
       const offscreen = offscreenCanvasRef.current || document.createElement('canvas');
       offscreen.width = gridDensity;
       offscreen.height = gridDensity;
@@ -1631,75 +1706,97 @@ export default function SilkGenerator() {
         const imgData = oCtx.getImageData(0, 0, offscreen.width, offscreen.height);
         const data = imgData.data;
 
-        const activeYaw = rotationAngle + (animate ? timeRef.current * autoYawSpeed * 22 : 0);
-        const activePitch = pitchAngle + (animate ? timeRef.current * autoPitchSpeed * 22 : 0);
-        const radX = (activePitch * Math.PI) / 180;
-        const radY = (activeYaw * Math.PI) / 180;
         const centerProjX = w / 2;
         const centerProjY = h / 2;
         const scaleW = w * 0.82;
         const scaleH = h * 0.82;
 
-        const nodes: Node3D[] = [];
+        // Loop period: Mesh wave angular frequency 3.2 is:
+        // T_mesh = 2 * PI / 3.2 ≈ 1.96349
+        const activeSpeed = speed || 0.1 || 1.0;
+        const period = (2 * Math.PI) / 3.2;
+        const sampleTimes = animate 
+          ? [
+              timeRef.current,
+              timeRef.current + period * 0.25,
+              timeRef.current + period * 0.50,
+              timeRef.current + period * 0.75
+            ]
+          : [timeRef.current];
 
-        for (let cy = 0; cy < gridDensity; cy++) {
-          for (let cx = 0; cx < gridDensity; cx++) {
-            const u = cx / (gridDensity - 1);
-            const v = cy / (gridDensity - 1);
+        const durationSec = (period / activeSpeed).toFixed(2) + 's';
 
-            const pX = Math.round(u * (offscreen.width - 1));
-            const pY = Math.round(v * (offscreen.height - 1));
-            const idx = (pY * offscreen.width + pX) * 4;
+        // Precompute node grids for each sample time frame
+        const nodesFrames: Node3D[][] = [];
 
-            let r = data[idx] ?? 0;
-            let g = data[idx+1] ?? 0;
-            let b = data[idx+2] ?? 0;
+        sampleTimes.forEach((tVal) => {
+          const frameNodes: Node3D[] = [];
+          
+          const activeYaw = rotationAngle + (animate ? tVal * autoYawSpeed * 22 : 0);
+          const activePitch = pitchAngle + (animate ? tVal * autoPitchSpeed * 22 : 0);
+          const radX = (activePitch * Math.PI) / 180;
+          const radY = (activeYaw * Math.PI) / 180;
 
-            if (contrastBoost !== 1.0) {
-              r = Math.min(255, Math.max(0, ((r / 255 - 0.5) * contrastBoost + 0.5) * 255));
-              g = Math.min(255, Math.max(0, ((g / 255 - 0.5) * contrastBoost + 0.5) * 255));
-              b = Math.min(255, Math.max(0, ((b / 255 - 0.5) * contrastBoost + 0.5) * 255));
+          for (let cy = 0; cy < gridDensity; cy++) {
+            for (let cx = 0; cx < gridDensity; cx++) {
+              const u = cx / (gridDensity - 1);
+              const v = cy / (gridDensity - 1);
+
+              const pX = Math.round(u * (offscreen.width - 1));
+              const pY = Math.round(v * (offscreen.height - 1));
+              const idx = (pY * offscreen.width + pX) * 4;
+
+              let r = data[idx] ?? 0;
+              let g = data[idx+1] ?? 0;
+              let b = data[idx+2] ?? 0;
+
+              if (contrastBoost !== 1.0) {
+                r = Math.min(255, Math.max(0, ((r / 255 - 0.5) * contrastBoost + 0.5) * 255));
+                g = Math.min(255, Math.max(0, ((g / 255 - 0.5) * contrastBoost + 0.5) * 255));
+                b = Math.min(255, Math.max(0, ((b / 255 - 0.5) * contrastBoost + 0.5) * 255));
+              }
+
+              let brightness = (0.299*r + 0.587*g + 0.114*b) / 255;
+              if (brightness < brightnessThreshold) {
+                brightness = 0; r = 0; g = 0; b = 0;
+              } else {
+                brightness = (brightness - brightnessThreshold) / (1.0 - brightnessThreshold);
+              }
+
+              const x3d = (u - 0.5) * scaleW;
+              const y3d = (v - 0.5) * scaleH;
+              const wave = Math.sin(tVal * 3.2 + (u + v) * 13.0) * meshWaveScale;
+              const z3d = brightness * extrusionDepth + wave;
+
+              const xRot = x3d * Math.cos(radY) - z3d * Math.sin(radY);
+              const zRot = x3d * Math.sin(radY) + z3d * Math.cos(radY);
+              const yRot = y3d * Math.cos(radX) - zRot * Math.sin(radX);
+              const zRot2 = y3d * Math.sin(radX) + zRot * Math.cos(radX);
+
+              const persp = isometricMode ? 0.95 : 750 / (750 + zRot2);
+
+              frameNodes.push({
+                u,
+                v,
+                x2d: centerProjX + xRot * persp,
+                y2d: centerProjY + yRot * persp,
+                z3d: zRot2,
+                r,
+                g,
+                b,
+                brightness,
+                size: particleSize * (0.35 + 1.25 * brightness) * persp
+              });
             }
-
-            let brightness = (0.299*r + 0.587*g + 0.114*b) / 255;
-            if (brightness < brightnessThreshold) {
-              brightness = 0; r = 0; g = 0; b = 0;
-            } else {
-              brightness = (brightness - brightnessThreshold) / (1.0 - brightnessThreshold);
-            }
-
-            const x3d = (u - 0.5) * scaleW;
-            const y3d = (v - 0.5) * scaleH;
-            const wave = Math.sin(timeRef.current * 3.2 + (u + v) * 13.0) * meshWaveScale;
-            const z3d = brightness * extrusionDepth + wave;
-
-            const xRot = x3d * Math.cos(radY) - z3d * Math.sin(radY);
-            const zRot = x3d * Math.sin(radY) + z3d * Math.cos(radY);
-            const yRot = y3d * Math.cos(radX) - zRot * Math.sin(radX);
-            const zRot2 = y3d * Math.sin(radX) + zRot * Math.cos(radX);
-
-            const persp = isometricMode ? 0.95 : 750 / (750 + zRot2);
-
-            nodes.push({
-              u,
-              v,
-              x2d: centerProjX + xRot * persp,
-              y2d: centerProjY + yRot * persp,
-              z3d: zRot2,
-              r,
-              g,
-              b,
-              brightness,
-              size: particleSize * (0.35 + 1.25 * brightness) * persp
-            });
           }
-        }
+          nodesFrames.push(frameNodes);
+        });
 
         const elements: string[] = [];
+        const frame0Nodes = nodesFrames[0];
 
-        // Compile styles as vectors
         if (meshStyle === 'points' || meshStyle === 'stipple' || meshStyle === 'disintegrated_voxels') {
-          nodes.forEach((node) => {
+          frame0Nodes.forEach((node, nodeIdx) => {
             if (node.brightness < 0.05) return;
             let colorStr = '';
             if (colorProfile === 'media') {
@@ -1710,13 +1807,24 @@ export default function SilkGenerator() {
               colorStr = getChromaColor(node.u, node.brightness, chromaColorStart, chromaColorEnd);
             }
             const rad = meshStyle === 'stipple' ? node.size * node.brightness * 1.55 : node.size * opacity;
-            elements.push(`  <circle cx="${node.x2d.toFixed(1)}" cy="${node.y2d.toFixed(1)}" r="${Math.max(0.5, rad).toFixed(1)}" fill="${colorStr}" opacity="${opacityFactor}" />`);
+            
+            if (animate && nodesFrames.length > 1) {
+              const cxVals = nodesFrames.map(f => f[nodeIdx]?.x2d.toFixed(1) ?? '0');
+              const cyVals = nodesFrames.map(f => f[nodeIdx]?.y2d.toFixed(1) ?? '0');
+              
+              elements.push(`  <circle cx="${cxVals[0]}" cy="${cyVals[0]}" r="${Math.max(0.5, rad).toFixed(1)}" fill="${colorStr}" opacity="${opacityFactor}">
+    <animate attributeName="cx" dur="${durationSec}" repeatCount="indefinite" values="${cxVals.join('; ')}; ${cxVals[0]}" />
+    <animate attributeName="cy" dur="${durationSec}" repeatCount="indefinite" values="${cyVals.join('; ')}; ${cyVals[0]}" />
+  </circle>`);
+            } else {
+              elements.push(`  <circle cx="${node.x2d.toFixed(1)}" cy="${node.y2d.toFixed(1)}" r="${Math.max(0.5, rad).toFixed(1)}" fill="${colorStr}" opacity="${opacityFactor}" />`);
+            }
           });
         } else if (meshStyle === 'wireframe' || meshStyle === 'plexus') {
           for (let cy = 0; cy < gridDensity; cy++) {
             for (let cx = 0; cx < gridDensity; cx++) {
               const curIdx = cy * gridDensity + cx;
-              const nodeA = nodes[curIdx];
+              const nodeA = frame0Nodes[curIdx];
               if (!nodeA || nodeA.brightness < 0.08) continue;
 
               let colorS = '';
@@ -1730,49 +1838,113 @@ export default function SilkGenerator() {
 
               if (meshStyle === 'plexus') {
                 let linesCount = 0;
-                for (let j = curIdx + 1; j < Math.min(nodes.length, curIdx + 45); j++) {
+                for (let j = curIdx + 1; j < Math.min(frame0Nodes.length, curIdx + 45); j++) {
                   if (linesCount >= plexusMaxConnections) break;
-                  const nodeB = nodes[j];
-                  if (!nodeB || nodeB.brightness < 0.08) continue;
-                  const dist = Math.hypot(nodeA.x2d - nodeB.x2d, nodeA.y2d - nodeB.y2d);
-                  if (dist < plexusMaxDistance) {
+                  const nodeB0 = frame0Nodes[j];
+                  if (!nodeB0 || nodeB0.brightness < 0.08) continue;
+                  
+                  const dist0 = Math.hypot(nodeA.x2d - nodeB0.x2d, nodeA.y2d - nodeB0.y2d);
+                  if (dist0 < plexusMaxDistance) {
                     linesCount++;
-                    elements.push(`  <line x1="${nodeA.x2d.toFixed(1)}" y1="${nodeA.y2d.toFixed(1)}" x2="${nodeB.x2d.toFixed(1)}" y2="${nodeB.y2d.toFixed(1)}" stroke="${colorS}" stroke-width="0.6" opacity="${((1.0 - dist/plexusMaxDistance) * 0.4).toFixed(2)}" />`);
+                    
+                    if (animate && nodesFrames.length > 1) {
+                      const x1Vals = nodesFrames.map(f => f[curIdx]?.x2d.toFixed(1) ?? '0');
+                      const y1Vals = nodesFrames.map(f => f[curIdx]?.y2d.toFixed(1) ?? '0');
+                      const x2Vals = nodesFrames.map(f => f[j]?.x2d.toFixed(1) ?? '0');
+                      const y2Vals = nodesFrames.map(f => f[j]?.y2d.toFixed(1) ?? '0');
+                      
+                      elements.push(`  <line x1="${x1Vals[0]}" y1="${y1Vals[0]}" x2="${x2Vals[0]}" y2="${y2Vals[0]}" stroke="${colorS}" stroke-width="0.6" opacity="${((1.0 - dist0/plexusMaxDistance) * 0.4).toFixed(2)}">
+    <animate attributeName="x1" dur="${durationSec}" repeatCount="indefinite" values="${x1Vals.join('; ')}; ${x1Vals[0]}" />
+    <animate attributeName="y1" dur="${durationSec}" repeatCount="indefinite" values="${y1Vals.join('; ')}; ${y1Vals[0]}" />
+    <animate attributeName="x2" dur="${durationSec}" repeatCount="indefinite" values="${x2Vals.join('; ')}; ${x2Vals[0]}" />
+    <animate attributeName="y2" dur="${durationSec}" repeatCount="indefinite" values="${y2Vals.join('; ')}; ${y2Vals[0]}" />
+  </line>`);
+                    } else {
+                      elements.push(`  <line x1="${nodeA.x2d.toFixed(1)}" y1="${nodeA.y2d.toFixed(1)}" x2="${nodeB0.x2d.toFixed(1)}" y2="${nodeB0.y2d.toFixed(1)}" stroke="${colorS}" stroke-width="0.6" opacity="${((1.0 - dist0/plexusMaxDistance) * 0.4).toFixed(2)}" />`);
+                    }
                   }
                 }
               } else {
                 if (cx < gridDensity - 1) {
-                  const nodeB = nodes[cy * gridDensity + (cx + 1)];
-                  if (nodeB && nodeB.brightness >= 0.08) {
-                    elements.push(`  <line x1="${nodeA.x2d.toFixed(1)}" y1="${nodeA.y2d.toFixed(1)}" x2="${nodeB.x2d.toFixed(1)}" y2="${nodeB.y2d.toFixed(1)}" stroke="${colorS}" stroke-width="${Math.max(0.4, particleSize * 0.18).toFixed(1)}" opacity="${opacityFactor * 0.6}" />`);
+                  const targetIdx = cy * gridDensity + (cx + 1);
+                  const nodeB0 = frame0Nodes[targetIdx];
+                  if (nodeB0 && nodeB0.brightness >= 0.08) {
+                    const strokeWidthVal = Math.max(0.4, particleSize * 0.18).toFixed(1);
+                    if (animate && nodesFrames.length > 1) {
+                      const x1Vals = nodesFrames.map(f => f[curIdx]?.x2d.toFixed(1) ?? '0');
+                      const y1Vals = nodesFrames.map(f => f[curIdx]?.y2d.toFixed(1) ?? '0');
+                      const x2Vals = nodesFrames.map(f => f[targetIdx]?.x2d.toFixed(1) ?? '0');
+                      const y2Vals = nodesFrames.map(f => f[targetIdx]?.y2d.toFixed(1) ?? '0');
+                      
+                      elements.push(`  <line x1="${x1Vals[0]}" y1="${y1Vals[0]}" x2="${x2Vals[0]}" y2="${y2Vals[0]}" stroke="${colorS}" stroke-width="${strokeWidthVal}" opacity="${opacityFactor * 0.6}">
+    <animate attributeName="x1" dur="${durationSec}" repeatCount="indefinite" values="${x1Vals.join('; ')}; ${x1Vals[0]}" />
+    <animate attributeName="y1" dur="${durationSec}" repeatCount="indefinite" values="${y1Vals.join('; ')}; ${y1Vals[0]}" />
+    <animate attributeName="x2" dur="${durationSec}" repeatCount="indefinite" values="${x2Vals.join('; ')}; ${x2Vals[0]}" />
+    <animate attributeName="y2" dur="${durationSec}" repeatCount="indefinite" values="${y2Vals.join('; ')}; ${y2Vals[0]}" />
+  </line>`);
+                    } else {
+                      elements.push(`  <line x1="${nodeA.x2d.toFixed(1)}" y1="${nodeA.y2d.toFixed(1)}" x2="${nodeB0.x2d.toFixed(1)}" y2="${nodeB0.y2d.toFixed(1)}" stroke="${colorS}" stroke-width="${strokeWidthVal}" opacity="${opacityFactor * 0.6}" />`);
+                    }
                   }
                 }
                 if (cy < gridDensity - 1) {
-                  const nodeC = nodes[(cy + 1) * gridDensity + cx];
-                  if (nodeC && nodeC.brightness >= 0.08) {
-                    elements.push(`  <line x1="${nodeA.x2d.toFixed(1)}" y1="${nodeA.y2d.toFixed(1)}" x2="${nodeC.x2d.toFixed(1)}" y2="${nodeC.y2d.toFixed(1)}" stroke="${colorS}" stroke-width="${Math.max(0.4, particleSize * 0.18).toFixed(1)}" opacity="${opacityFactor * 0.6}" />`);
+                  const targetIdx = (cy + 1) * gridDensity + cx;
+                  const nodeC0 = frame0Nodes[targetIdx];
+                  if (nodeC0 && nodeC0.brightness >= 0.08) {
+                    const strokeWidthVal = Math.max(0.4, particleSize * 0.18).toFixed(1);
+                    if (animate && nodesFrames.length > 1) {
+                      const x1Vals = nodesFrames.map(f => f[curIdx]?.x2d.toFixed(1) ?? '0');
+                      const y1Vals = nodesFrames.map(f => f[curIdx]?.y2d.toFixed(1) ?? '0');
+                      const x2Vals = nodesFrames.map(f => f[targetIdx]?.x2d.toFixed(1) ?? '0');
+                      const y2Vals = nodesFrames.map(f => f[targetIdx]?.y2d.toFixed(1) ?? '0');
+                      
+                      elements.push(`  <line x1="${x1Vals[0]}" y1="${y1Vals[0]}" x2="${x2Vals[0]}" y2="${y2Vals[0]}" stroke="${colorS}" stroke-width="${strokeWidthVal}" opacity="${opacityFactor * 0.6}">
+    <animate attributeName="x1" dur="${durationSec}" repeatCount="indefinite" values="${x1Vals.join('; ')}; ${x1Vals[0]}" />
+    <animate attributeName="y1" dur="${durationSec}" repeatCount="indefinite" values="${y1Vals.join('; ')}; ${y1Vals[0]}" />
+    <animate attributeName="x2" dur="${durationSec}" repeatCount="indefinite" values="${x2Vals.join('; ')}; ${x2Vals[0]}" />
+    <animate attributeName="y2" dur="${durationSec}" repeatCount="indefinite" values="${y2Vals.join('; ')}; ${y2Vals[0]}" />
+  </line>`);
+                    } else {
+                      elements.push(`  <line x1="${nodeA.x2d.toFixed(1)}" y1="${nodeA.y2d.toFixed(1)}" x2="${nodeC0.x2d.toFixed(1)}" y2="${nodeC0.y2d.toFixed(1)}" stroke="${colorS}" stroke-width="${strokeWidthVal}" opacity="${opacityFactor * 0.6}" />`);
+                    }
                   }
                 }
               }
             }
           }
         } else if (meshStyle === 'ascii') {
-          // Render vector text character filaments
-          nodes.forEach((node) => {
+          frame0Nodes.forEach((node, nodeIdx) => {
             if (node.brightness < 0.08) return;
             let colorStr = node.brightness < 0.45 ? 'rgb(255,0,130)' : 'rgb(0,248,255)';
             if (colorProfile === 'media') colorStr = `rgb(${node.r},${node.g},${node.b})`;
             const char = node.brightness < 0.5 ? '0' : '1';
-            elements.push(`  <text x="${node.x2d.toFixed(1)}" y="${node.y2d.toFixed(1)}" fill="${colorStr}" font-family="monospace" font-size="8" font-weight="bold" text-anchor="middle" alignment-baseline="middle" opacity="${opacityFactor}">${char}</text>`);
+            
+            if (animate && nodesFrames.length > 1) {
+              const xVals = nodesFrames.map(f => f[nodeIdx]?.x2d.toFixed(1) ?? '0');
+              const yVals = nodesFrames.map(f => f[nodeIdx]?.y2d.toFixed(1) ?? '0');
+              
+              elements.push(`  <text x="${xVals[0]}" y="${yVals[0]}" fill="${colorStr}" font-family="monospace" font-size="8" font-weight="bold" text-anchor="middle" alignment-baseline="middle" opacity="${opacityFactor}">
+    ${char}
+    <animate attributeName="x" dur="${durationSec}" repeatCount="indefinite" values="${xVals.join('; ')}; ${xVals[0]}" />
+    <animate attributeName="y" dur="${durationSec}" repeatCount="indefinite" values="${yVals.join('; ')}; ${yVals[0]}" />
+  </text>`);
+            } else {
+              elements.push(`  <text x="${node.x2d.toFixed(1)}" y="${node.y2d.toFixed(1)}" fill="${colorStr}" font-family="monospace" font-size="8" font-weight="bold" text-anchor="middle" alignment-baseline="middle" opacity="${opacityFactor}">${char}</text>`);
+            }
           });
         } else {
-          // Triangulated outlines
+          // Triangulated Outlines
           for (let cy = 0; cy < gridDensity - 1; cy++) {
             for (let cx = 0; cx < gridDensity - 1; cx++) {
-              const n00 = nodes[cy * gridDensity + cx];
-              const n10 = nodes[cy * gridDensity + (cx + 1)];
-              const n01 = nodes[(cy + 1) * gridDensity + cx];
-              const n11 = nodes[(cy + 1) * gridDensity + (cx + 1)];
+              const idx00 = cy * gridDensity + cx;
+              const idx10 = cy * gridDensity + (cx + 1);
+              const idx01 = (cy + 1) * gridDensity + cx;
+              const idx11 = (cy + 1) * gridDensity + (cx + 1);
+
+              const n00 = frame0Nodes[idx00];
+              const n10 = frame0Nodes[idx10];
+              const n01 = frame0Nodes[idx01];
+              const n11 = frame0Nodes[idx11];
 
               if (!n00 || !n10 || !n01 || !n11) continue;
 
@@ -1788,8 +1960,30 @@ export default function SilkGenerator() {
                 fillB = getChromaColor((n10.u+n11.u+n01.u)/3, (n10.brightness+n11.brightness+n01.brightness)/3, chromaColorStart, chromaColorEnd);
               }
 
-              elements.push(`  <polygon points="${n00.x2d.toFixed(1)},${n00.y2d.toFixed(1)} ${n10.x2d.toFixed(1)},${n10.y2d.toFixed(1)} ${n01.x2d.toFixed(1)},${n01.y2d.toFixed(1)}" fill="${fillA}" opacity="${opacityFactor}" />`);
-              elements.push(`  <polygon points="${n10.x2d.toFixed(1)},${n10.y2d.toFixed(1)} ${n11.x2d.toFixed(1)},${n11.y2d.toFixed(1)} ${n01.x2d.toFixed(1)},${n01.y2d.toFixed(1)}" fill="${fillB}" opacity="${opacityFactor}" />`);
+              if (animate && nodesFrames.length > 1) {
+                const pointsAVals = nodesFrames.map(f => {
+                  const node00 = f[idx00];
+                  const node10 = f[idx10];
+                  const node01 = f[idx01];
+                  return `${node00?.x2d.toFixed(1)},${node00?.y2d.toFixed(1)} ${node10?.x2d.toFixed(1)},${node10?.y2d.toFixed(1)} ${node01?.x2d.toFixed(1)},${node01?.y2d.toFixed(1)}`;
+                });
+                const pointsBVals = nodesFrames.map(f => {
+                  const node10 = f[idx10];
+                  const node11 = f[idx11];
+                  const node01 = f[idx01];
+                  return `${node10?.x2d.toFixed(1)},${node10?.y2d.toFixed(1)} ${node11?.x2d.toFixed(1)},${node11?.y2d.toFixed(1)} ${node01?.x2d.toFixed(1)},${node01?.y2d.toFixed(1)}`;
+                });
+
+                elements.push(`  <polygon points="${pointsAVals[0]}" fill="${fillA}" opacity="${opacityFactor}">
+    <animate attributeName="points" dur="${durationSec}" repeatCount="indefinite" values="${pointsAVals.join('; ')}; ${pointsAVals[0]}" />
+  </polygon>`);
+                elements.push(`  <polygon points="${pointsBVals[0]}" fill="${fillB}" opacity="${opacityFactor}">
+    <animate attributeName="points" dur="${durationSec}" repeatCount="indefinite" values="${pointsBVals.join('; ')}; ${pointsBVals[0]}" />
+  </polygon>`);
+              } else {
+                elements.push(`  <polygon points="${n00.x2d.toFixed(1)},${n00.y2d.toFixed(1)} ${n10.x2d.toFixed(1)},${n10.y2d.toFixed(1)} ${n01.x2d.toFixed(1)},${n01.y2d.toFixed(1)}" fill="${fillA}" opacity="${opacityFactor}" />`);
+                elements.push(`  <polygon points="${n10.x2d.toFixed(1)},${n10.y2d.toFixed(1)} ${n11.x2d.toFixed(1)},${n11.y2d.toFixed(1)} ${n01.x2d.toFixed(1)},${n01.y2d.toFixed(1)}" fill="${fillB}" opacity="${opacityFactor}" />`);
+              }
             }
           }
         }
@@ -1801,15 +1995,54 @@ export default function SilkGenerator() {
   <!-- Created with premium 3D Aesthetic Silk & Fluid Mesh Vector Engine -->
   <g id="transparent-aesthetic-container">\n`;
     const svgFooter = '\n  </g>\n</svg>';
-    const totalSvgString = svgHeader + svgMiddle + svgFooter;
+    return svgHeader + svgMiddle + svgFooter;
+  };
 
-    const blob = new Blob([totalSvgString], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.download = `3d-silk-vector-${generatorMode}-${uniqueId}.svg`;
-    anchor.href = url;
-    anchor.click();
-    showToast('Success: Transparent Vector SVG downloaded!');
+  // --- DOWNLOAD STATIC / ANIMATED VECTOR SVG ---
+  const handleExportSVG = () => {
+    try {
+      showToast('Processing smooth-looping SVG animation coordinates...');
+      const svgString = generateDynamicSVGString();
+      const uniqueId = Date.now();
+      const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.download = `3d-silk-vector-${generatorMode}-${uniqueId}.svg`;
+      anchor.href = url;
+      anchor.click();
+      showToast('Success: Animated Looping Vector SVG downloaded!');
+    } catch (err) {
+      console.error(err);
+      showToast('Export failed. Check settings and retry.');
+    }
+  };
+
+  // --- COPY ANIMATED SVG CODE DIRECTLY TO CLIPBOARD ---
+  const handleCopySVGCodeDirect = () => {
+    try {
+      const svgString = generateDynamicSVGString();
+      navigator.clipboard.writeText(svgString);
+      setCopiedSvg(true);
+      showToast('Success: Animated SVG vector code copied to clipboard!');
+      setTimeout(() => setCopiedSvg(false), 3000);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to copy. Try downloading the SVG file.');
+    }
+  };
+
+  // --- COPY CORE HTML BACKDROP WIDGET DIRECTLY ---
+  const handleCopyWidgetInlineCode = () => {
+    try {
+      const liveScript = getLiveInlineScript();
+      navigator.clipboard.writeText(liveScript);
+      setCopiedWidget(true);
+      showToast('Success: HTML canvas backdrop widget copied!');
+      setTimeout(() => setCopiedWidget(false), 3000);
+    } catch (err) {
+      console.error(err);
+      showToast('Copy failed.');
+    }
   };
 
   // --- CAPTURE HIGH-RES PNG OVERLAY ---
@@ -1836,19 +2069,55 @@ export default function SilkGenerator() {
       return;
     }
 
+    const originalWidth = containerRef.current?.clientWidth || canvas.width;
+    const originalHeight = containerRef.current?.clientHeight || canvas.height;
+    let targetHeight = parseInt(videoQuality);
+    let scale = targetHeight / originalHeight;
+
+    // Profile safety: constrain within 3840x2160 to prevent browser MediaRecorder downscaling to 480p
+    let finalWidth = originalWidth * scale;
+    let finalHeight = originalHeight * scale;
+    if (finalWidth > 3840) {
+      scale *= (3840 / finalWidth);
+      finalWidth = originalWidth * scale;
+      finalHeight = originalHeight * scale;
+    }
+    if (finalHeight > 2160) {
+      scale *= (2160 / finalHeight);
+      finalWidth = originalWidth * scale;
+      finalHeight = originalHeight * scale;
+    }
+
+    isRecordingHighResRef.current = true;
+    recordingScaleRef.current = scale;
+    canvas.width = Math.floor(finalWidth);
+    canvas.height = Math.floor(finalHeight);
+
     recordedBlobsRef.current = [];
     const stream = canvas.captureStream(30);
 
-    let options = { mimeType: 'video/webm;codecs=vp9,opus' };
+    // Compute high-bitrate targeting to prevent compression artifacts (720p: 6M, 1080p: 15M, 2K: 25M, 4K: 50M)
+    let bBps = 15000000;
+    if (videoQuality === '720') bBps = 6000000;
+    else if (videoQuality === '1440') bBps = 25000000;
+    else if (videoQuality === '2160') bBps = 50000000;
+
+    let options = { 
+      mimeType: 'video/webm;codecs=vp9,opus', 
+      videoBitsPerSecond: bBps 
+    };
     if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options = { mimeType: 'video/webm' };
+      options = { 
+        mimeType: 'video/webm', 
+        videoBitsPerSecond: bBps 
+      };
     }
 
     try {
       const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       setRecordingStatus('recording');
-      showToast('Recording: Capturing 5-second dynamic loop overlay...');
+      showToast(`Recording: Capturing ${videoDuration}s dynamic 3D Silk loop in ${videoQuality}p with ${Math.round(bBps / 1000000)}Mbps Bitrate...`);
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
@@ -1857,16 +2126,21 @@ export default function SilkGenerator() {
       };
 
       mediaRecorder.onstop = () => {
+        isRecordingHighResRef.current = false;
+        if (containerRef.current) {
+          canvas.width = containerRef.current.clientWidth;
+          canvas.height = containerRef.current.clientHeight;
+        }
         setRecordingStatus('finished');
         const superBuffer = new Blob(recordedBlobsRef.current, { type: 'video/webm' });
         const videoURL = URL.createObjectURL(superBuffer);
         const link = document.createElement('a');
-        link.download = `3d-alpha-loop-${Date.now()}.webm`;
+        link.download = `3d-alpha-loop-${videoQuality}p-${videoDuration}s-${Date.now()}.webm`;
         link.href = videoURL;
         link.click();
         
         setRecordingStatus('idle');
-        showToast('Success: Transparent WebM loop downloaded!');
+        showToast(`Success: Transparent high-fidelity ${videoQuality}p WebM loop downloaded!`);
       };
 
       mediaRecorder.start();
@@ -1874,7 +2148,7 @@ export default function SilkGenerator() {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
           mediaRecorderRef.current.stop();
         }
-      }, 5000);
+      }, videoDuration * 1000);
 
     } catch (err) {
       showToast('Capturing unsupported within frame sandbox.');
@@ -2341,11 +2615,11 @@ export default function SilkGenerator() {
   };
 
   return (
-    <div className="grow w-full flex flex-col lg:flex-row min-h-0 bg-[#04060a] text-zinc-100 rounded-xl lg:overflow-hidden border border-white/5 shadow-3xl">
+    <div className="flex-grow w-full flex flex-col lg:flex-row min-h-0 bg-[#04060a] text-zinc-100 rounded-xl lg:overflow-hidden border border-white/5 shadow-3xl">
       
       {/* Toast Alert Feedback */}
       {toastMessage && (
-        <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 bg-[#080d19] border border-violet-500/40 text-violet-300 text-[10px] font-mono tracking-widest uppercase px-4 py-2.5 shadow-2xl flex items-center gap-2 animate-pulse rounded-full">
+        <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 bg-[#080d19] border border-violet-500/40 text-violet-300 text-[10px] font-mono tracking-widest uppercase px-4 py-2.5 rounded shadow-2xl flex items-center gap-2 animate-pulse rounded-full">
           <Sparkles size={11} className="animate-spin text-fuchsia-400" />
           <span>{toastMessage}</span>
         </div>
@@ -2363,15 +2637,15 @@ export default function SilkGenerator() {
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleMouseUp}
-          className="grow w-full relative overflow-hidden flex items-center justify-center bg-transparent select-none min-h-87.5 lg:min-h-0 shrink-0 lg:shrink"
+          className="flex-grow w-full relative overflow-hidden flex items-center justify-center bg-transparent select-none min-h-[350px] lg:min-h-0 shrink-0 lg:shrink"
           style={{ cursor: mouseMode === 'drag' ? 'grab' : 'crosshair' }}
         >
-          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block z-2 pointer-events-auto" />
+          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block z-[2] pointer-events-auto" />
 
           {/* Frost Backdrop overlay filter for Ribbon (Silk Flow) */}
           {generatorMode === 'ribbon' && bgBlur > 0 && (
             <div 
-              className="absolute inset-0 pointer-events-none z-1"
+              className="absolute inset-0 pointer-events-none z-[1]"
               style={{
                 backdropFilter: `blur(${bgBlur}px)`,
                 WebkitBackdropFilter: `blur(${bgBlur}px)`,
@@ -2382,7 +2656,7 @@ export default function SilkGenerator() {
           {/* Smooth Backdrop overlay filter for Media Mesh */}
           {generatorMode === 'mediamesh' && meshBlur > 0 && (
             <div 
-              className="absolute inset-0 pointer-events-none z-1"
+              className="absolute inset-0 pointer-events-none z-[1]"
               style={{
                 backdropFilter: `blur(${meshBlur}px)`,
                 WebkitBackdropFilter: `blur(${meshBlur}px)`,
@@ -2392,18 +2666,18 @@ export default function SilkGenerator() {
 
           {/* Vignette Contrast Overlay */}
           {!isTransparentBg && (
-            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_45%,rgba(2,3,5,0.78)_100%)] z-2" />
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_45%,rgba(2,3,5,0.78)_100%)] z-[2]" />
           )}
 
           {/* Tech Metrics Label */}
-          <div className="absolute bottom-4 left-4 pointer-events-none bg-black/60 border border-white/5 backdrop-blur px-2.5 py-1 rounded text-[8px] font-mono text-zinc-500 uppercase tracking-widest z-3">
+          <div className="absolute bottom-4 left-4 pointer-events-none bg-black/60 border border-white/5 backdrop-blur px-2.5 py-1 rounded text-[8px] font-mono text-zinc-500 uppercase tracking-widest z-[3]">
             {generatorMode === 'ribbon' ? '3D Twisted Filament Studio' : `3D Scanned Mesh • ${gridDensity}x${gridDensity}`}
           </div>
         </div>
       </div>
 
       {/* Control Sidebar Panel */}
-      <div className="w-full lg:w-87.5 border-t lg:border-t-0 lg:border-l border-white/5 bg-[#06080d] flex flex-col lg:h-full shrink-0 shadow-2xl overflow-y-auto">
+      <div className="w-full lg:w-[350px] border-t lg:border-t-0 lg:border-l border-white/5 bg-[#06080d] flex flex-col lg:h-full shrink-0 shadow-2xl overflow-y-auto">
         
         {/* Rendering Mode selectors */}
         <div className="p-4 border-b border-white/5 bg-[#080b12] flex flex-col gap-3">
@@ -2499,7 +2773,7 @@ export default function SilkGenerator() {
               
               {/* Premium 3D Theme Presets Selector */}
               <div className="flex flex-col gap-2 p-3 rounded-lg border border-violet-950/40 bg-zinc-950/70">
-                <span className="text-[9px] font-extrabold tracking-wider font-mono text-violet-400 uppercase leading-none flex items-center gap-1">
+                <span className="text-[9px] font-extrabold tracking-wider font-mono text-violet-400 uppercase leading-none block flex items-center gap-1">
                   <Sparkles size={11} className="text-pink-400 animate-pulse" /> Live Premium Theme Presets
                 </span>
                 <span className="text-[8px] text-zinc-500 leading-tight block">
@@ -2566,7 +2840,7 @@ export default function SilkGenerator() {
                   <div 
                     onDragOver={handleDragOver}
                     onDrop={handleDrop}
-                    className="border border-dashed border-zinc-800 rounded px-2 py-3 text-center text-[9px] text-zinc-500 flex flex-col items-center justify-center gap-1 hover:border-violet-500/35 transition-all leading-tight cursor-pointer"
+                    className="border border-dashed border-zinc-800 rounded px-2 py-3 text-center text-[9px] text-zinc-500 flex flex-col items-center justify-center gap-1 hover:border-violet-500/35 transition-all text-center leading-tight cursor-pointer"
                   >
                     <Upload size={12} className="text-zinc-600 animate-bounce" />
                     <span>Drag and drop image or video file here</span>
@@ -3172,16 +3446,16 @@ export default function SilkGenerator() {
           {activeTab === 'export' && (
             <div className="flex flex-col gap-4 font-mono text-[10px]">
               <span className="text-[9px] font-bold tracking-wider text-zinc-500 uppercase leading-none block">
-                Download Clean Transparent Assets
+                Copy Vector Assets
               </span>
 
-              {/* Static Vector SVG download */}
+              {/* Copy loop-animated SVG Code directly */}
               <button
-                onClick={handleExportSVG}
-                className="w-full py-2.5 px-3 bg-linear-to-r from-pink-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 active:scale-95 text-white font-extrabold rounded text-[9px] tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl shadow-pink-600/15"
+                onClick={handleCopySVGCodeDirect}
+                className="w-full py-2.5 px-3 bg-[#0d0f14] hover:bg-zinc-900 border border-pink-500/20 hover:border-pink-500/40 text-pink-300 rounded text-[9px] font-extrabold tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md shadow-pink-500/5"
               >
-                <Download size={12} />
-                Download Vector image (.SVG)
+                {copiedSvg ? <Check size={11} className="text-emerald-400 animate-bounce" /> : <Copy size={11} className="text-pink-400" />}
+                {copiedSvg ? 'SVG Code Copied!' : 'Copy Animated SVG Code'}
               </button>
 
               {/* Single Frame PNG download */}
@@ -3192,6 +3466,41 @@ export default function SilkGenerator() {
                 <ImageIcon size={11} className="text-pink-400" />
                 Capture Canvas Snapshot (.PNG)
               </button>
+
+              {/* Dynamic HD Video Quality & Duration Selectors */}
+              <div className="grid grid-cols-2 gap-2 my-1">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[8.5px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">WebM Quality</span>
+                  <select
+                    value={videoQuality}
+                    onChange={(e) => setVideoQuality(e.target.value as any)}
+                    className="w-full bg-[#0d0f14] border border-pink-500/10 rounded py-1 px-2 text-[9px] text-zinc-300 font-mono focus:outline-none focus:border-pink-500/50 cursor-pointer"
+                  >
+                    <option value="720">720p (HD)</option>
+                    <option value="1080">1080p (FHD)</option>
+                    <option value="1440">1440p (2K)</option>
+                    <option value="2160">2160p (4K)</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[8.5px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Duration</span>
+                  <select
+                    value={videoDuration}
+                    onChange={(e) => setVideoDuration(parseInt(e.target.value))}
+                    className="w-full bg-[#0d0f14] border border-pink-500/10 rounded py-1 px-2 text-[9px] text-zinc-300 font-mono focus:outline-none focus:border-pink-500/50 cursor-pointer"
+                  >
+                    <option value="3">3s</option>
+                    <option value="10">10s</option>
+                    <option value="20">20s (Default)</option>
+                    <option value="30">30s</option>
+                    <option value="60">1m</option>
+                    <option value="120">2m</option>
+                    <option value="180">3m</option>
+                    <option value="240">4m</option>
+                    <option value="300">5m</option>
+                  </select>
+                </div>
+              </div>
 
               {/* Transparent WebM recording */}
               <button
@@ -3208,42 +3517,24 @@ export default function SilkGenerator() {
 
               <div className="border-t border-white/5 my-1" />
               <span className="text-[9px] font-bold tracking-wider text-zinc-500 uppercase leading-none block">
-                Three.js-like Premium Interactivity
+                Premium Live Webs Integration
               </span>
 
-              {/* Premium 3D Web Integration Copier Hub */}
+              {/* Copy Standalone HTML Backdrop Widget directly */}
               <button
-                onClick={() => { setShowCodeHub(true); setCodeHubTab('embed'); }}
-                className="w-full py-2.5 px-3 bg-linear-to-r from-violet-600 via-indigo-600 to-cyan-600 hover:from-violet-500 hover:via-indigo-500 hover:to-cyan-500 active:scale-95 text-white font-extrabold rounded text-[10px] tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl shadow-indigo-600/20"
+                onClick={handleCopyWidgetInlineCode}
+                className="w-full py-2.5 px-3 bg-[#0b0c10] hover:bg-zinc-900 border border-violet-500/20 hover:border-violet-500/40 text-violet-300 rounded text-[9px] font-extrabold tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md shadow-violet-500/5"
               >
-                <Code size={13} className="text-cyan-300 animate-pulse" />
-                Open Code Embed Hub (WP / Webflow / HTML)
-              </button>
-
-              {/* 1. Fully self-contained single file interactive HTML page component */}
-              <button
-                onClick={handleDownloadHTMLComponent}
-                className="w-full py-2.5 px-3 bg-[#0d111b] hover:bg-zinc-900 border border-violet-500/20 hover:border-violet-500/40 text-violet-300 rounded text-[9px] font-extrabold tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md shadow-violet-500/5"
-              >
-                <Download size={11} className="text-violet-400" />
-                Download Standalone HTML backdrop
-              </button>
-
-              {/* 2. Standard iframe embed copier */}
-              <button
-                onClick={handleCopyEmbedCode}
-                className="w-full py-2.5 px-3 bg-[#07090d] hover:bg-zinc-900 border border-zinc-800 hover:border-pink-500/35 text-zinc-200 rounded text-[9px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-              >
-                {copiableEmbed ? <Check size={11} className="text-emerald-400 animate-bounce" /> : <Copy size={11} className="text-zinc-500" />}
-                {copiableEmbed ? 'copied to clipboard!' : 'Copy Iframe HTML Embed'}
+                {copiedWidget ? <Check size={11} className="text-emerald-400 animate-bounce" /> : <Copy size={11} className="text-violet-400" />}
+                {copiedWidget ? 'Widget Code Copied!' : 'Copy Live HTML Widget'}
               </button>
 
               <div className="p-3 bg-zinc-950/80 rounded border border-white/5 mt-0.5 leading-relaxed text-[8px] text-zinc-400 font-sans">
                 <span className="text-[8.5px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">
-                  Integrating into Squarespace, Wix, webflow or WordPress
+                  platform support & instructions
                 </span>
                 <p>
-                  These components carry native alpha transparent values. Download the self-contained HTML component, upload it directly as a code block, or embed it as underlay. The 3D plexus meshes and stardust particle gravity reactions will immediately animate elegantly behind any page sections!
+                  These components carry native alpha transparent values. Paste or upload these directly to your platform (Webflow, Wix, WordPress, Shopify) in custom code blocks to have your custom 3D mesh layers and silk ribbons flow beautifully behind your main text content!
                 </p>
               </div>
 
@@ -3256,7 +3547,7 @@ export default function SilkGenerator() {
 
       {/* --- PREMIUM WEB CODE EMBED HUB OVERLAY MODAL --- */}
       {showCodeHub && (
-        <div className="fixed inset-0 min-h-screen w-screen bg-black/85 backdrop-blur-md z-9999 flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 min-h-screen w-screen bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 overflow-y-auto">
           <div className="max-w-2xl w-full bg-zinc-950 border border-zinc-900 rounded-xl overflow-hidden shadow-2xl flex flex-col text-zinc-300 animate-in fade-in zoom-in-95 duration-200 text-left font-sans">
             
             {/* Header */}

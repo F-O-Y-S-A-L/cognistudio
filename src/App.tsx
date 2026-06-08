@@ -142,7 +142,17 @@ export default function App() {
   const viewportRef = useRef<{
     getPNGDataURL: () => string | null;
     generateSVG: () => string | null;
+    getCanvas: () => HTMLCanvasElement | null;
+    startHighResRecording?: (heightPreset: number) => void;
+    stopHighResRecording?: () => void;
   } | null>(null);
+
+  // Video recording state & refs
+  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording' | 'finished'>('idle');
+  const [videoQuality, setVideoQuality] = useState<'720' | '1080' | '1440' | '2160'>('1080');
+  const [videoDuration, setVideoDuration] = useState<number>(20);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedBlobsRef = useRef<Blob[]>([]);
 
   // Parse location hash on mount to restore user designs
   useEffect(() => {
@@ -188,20 +198,82 @@ export default function App() {
     }
   };
 
-  // Action: Export SVG Vector Grid
-  const handleExportSVG = () => {
-    if (!viewportRef.current) return;
-    const svgStr = viewportRef.current.generateSVG();
-    if (svgStr) {
-      const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.download = `twenty-halftone-${settings.sourceMode}-${settings.shapeKey || 'text'}.svg`;
-      anchor.href = url;
-      anchor.click();
-      showToast('Finished downloading high-contrast SVG vectors!');
-    } else {
-      showToast('Error compiling vector grid. Try again.');
+  // Action: Transparent & High-Fidelity WebM Dynamic Recording
+  const handleToggleRecording = () => {
+    const canvas = viewportRef.current?.getCanvas();
+    if (!canvas) {
+      showToast('Error: 3D canvas viewport not initialized yet.');
+      return;
+    }
+
+    if (recordingStatus === 'recording') {
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
+      }
+      return;
+    }
+
+    // Upscale WebGL buffer
+    viewportRef.current?.startHighResRecording?.(parseInt(videoQuality));
+
+    recordedBlobsRef.current = [];
+    const stream = canvas.captureStream(30);
+
+    // Compute high-bitrate targeting to prevent compression noise (720p: 6M, 1080p: 15M, 2K: 25M, 4K: 50M)
+    let bBps = 15000000;
+    if (videoQuality === '720') bBps = 6000000;
+    else if (videoQuality === '1440') bBps = 25000000;
+    else if (videoQuality === '2160') bBps = 50000000;
+
+    let options = { 
+      mimeType: 'video/webm;codecs=vp9,opus', 
+      videoBitsPerSecond: bBps 
+    };
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { 
+        mimeType: 'video/webm', 
+        videoBitsPerSecond: bBps 
+      };
+    }
+
+    try {
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      setRecordingStatus('recording');
+      showToast(`Recording: Capturing ${videoDuration}s dynamic 3D loop in ${videoQuality}p with ${Math.round(bBps / 1000000)}Mbps Bitrate...`);
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedBlobsRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        // Restore WebGL buffer size
+        viewportRef.current?.stopHighResRecording?.();
+
+        setRecordingStatus('finished');
+        const superBuffer = new Blob(recordedBlobsRef.current, { type: 'video/webm' });
+        const videoURL = URL.createObjectURL(superBuffer);
+        const link = document.createElement('a');
+        link.download = `3d-halftone-loop-${videoQuality}p-${videoDuration}s-${Date.now()}.webm`;
+        link.href = videoURL;
+        link.click();
+        
+        setRecordingStatus('idle');
+        showToast(`Success: Dynamic ${videoQuality}p WebM loop video downloaded successfully!`);
+      };
+
+      mediaRecorder.start();
+      setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop();
+        }
+      }, videoDuration * 1000);
+
+    } catch (err) {
+      showToast('Capturing unsupported within frame sandbox.');
+      console.warn(err);
     }
   };
 
@@ -289,8 +361,12 @@ export default function App() {
               onChange={setSettings} 
               onCopyLink={handleCopyLink}
               onExportPNG={handleExportPNG}
-              onExportSVG={handleExportSVG}
-              onGetSVGCode={() => viewportRef.current?.generateSVG() ?? ''}
+              onExportWebM={handleToggleRecording}
+              recordingStatus={recordingStatus}
+              videoQuality={videoQuality}
+              onVideoQualityChange={setVideoQuality}
+              videoDuration={videoDuration}
+              onVideoDurationChange={setVideoDuration}
               onReset={() => {
                 setSettings(INITIAL_SETTINGS);
                 showToast('Success: All parameters reset to factory standards!');

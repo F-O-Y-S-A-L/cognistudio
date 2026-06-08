@@ -24,7 +24,8 @@ import {
   RotateCcw,
   Code,
   Check,
-  RefreshCw
+  RefreshCw,
+  Video
 } from 'lucide-react';
 
 interface ControlPanelProps {
@@ -32,9 +33,13 @@ interface ControlPanelProps {
   onChange: (updater: (prev: AppSettings) => AppSettings) => void;
   onCopyLink?: () => void;
   onExportPNG?: () => void;
-  onExportSVG?: () => void;
+  onExportWebM?: () => void;
+  recordingStatus?: 'idle' | 'recording' | 'finished';
   onReset?: () => void;
-  onGetSVGCode?: () => string | null;
+  videoQuality?: '720' | '1080' | '1440' | '2160';
+  onVideoQualityChange?: (val: '720' | '1080' | '1440' | '2160') => void;
+  videoDuration?: number;
+  onVideoDurationChange?: (val: number) => void;
 }
 
 export default function ControlPanel({ 
@@ -42,14 +47,18 @@ export default function ControlPanel({
   onChange,
   onCopyLink,
   onExportPNG,
-  onExportSVG,
+  onExportWebM,
+  recordingStatus = 'idle',
   onReset,
-  onGetSVGCode
+  videoQuality = '1080',
+  onVideoQualityChange,
+  videoDuration = 20,
+  onVideoDurationChange
 }: ControlPanelProps) {
   // Sidebar tab state matching twenty.com UI
   const [activeTab, setActiveTab] = useState<'design' | 'animations' | 'export'>('design');
 
-  const [codeTab, setCodeTab] = useState<'react' | 'html' | 'svg'>('react');
+  const [codeTab, setCodeTab] = useState<'react' | 'html'>('react');
   const [copiedCode, setCopiedCode] = useState(false);
 
   // AI Design Co-Pilot states
@@ -3662,31 +3671,67 @@ export default function StandaloneHalftoneViewer() {
         <div className="px-5 py-5 flex flex-col gap-5 animate-fade-in font-sans" id="export-tab-panel">
           
           <div className="flex flex-col gap-1 bg-zinc-950 p-4 rounded-xl border border-zinc-850/80">
-            <h4 className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase font-mono mb-2">VECTOR VECTOR SVG</h4>
-            <p className="text-[11px] text-zinc-500 leading-relaxed font-sans mb-4">
-              Compile the camera view geometry into layered high-contrast XML vector fields, suitable for razor-sharp layouts, 4K artwork prints, and SVG editors.
+            <h4 className="text-[10px] font-bold tracking-widest text-[#a1a1aa] uppercase font-mono mb-2">3D RASTER CAPTURES</h4>
+            <p className="text-[11px] text-zinc-500 leading-relaxed font-sans mb-3">
+              Get pixel-perfect 3D raster renders of the viewport utilizing GPU postprocessing. Transparent channels and interactive lighting are fully rendered.
             </p>
-            <button
-              onClick={onExportSVG}
-              className="w-full py-2.5 bg-zinc-100 hover:bg-white text-zinc-950 rounded-lg text-xs font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 shadow-lg shadow-black/30 cursor-pointer"
-            >
-              <Sparkles size={14} className="text-indigo-600 animate-pulse" />
-              Download SVG Vector
-            </button>
-          </div>
+            
+            {/* Dynamic HD Video Quality & Duration Selector System */}
+            <div className="grid grid-cols-2 gap-3 mb-3.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] font-bold text-zinc-400 tracking-wider uppercase font-mono">Video Quality</label>
+                <select
+                  value={videoQuality}
+                  onChange={(e) => onVideoQualityChange?.(e.target.value as any)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-1.5 px-3 text-xs text-zinc-100 font-sans focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="720">720p (HD)</option>
+                  <option value="1080">1080p (FHD)</option>
+                  <option value="1440">1440p (2K)</option>
+                  <option value="2160">2160p (4K)</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] font-bold text-zinc-400 tracking-wider uppercase font-mono">Duration</label>
+                <select
+                  value={videoDuration}
+                  onChange={(e) => onVideoDurationChange?.(parseInt(e.target.value))}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-1.5 px-3 text-xs text-zinc-100 font-sans focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="3">3 seconds</option>
+                  <option value="10">10 seconds</option>
+                  <option value="20">20 seconds</option>
+                  <option value="30">30 seconds</option>
+                  <option value="60">1 min</option>
+                  <option value="120">2 mins</option>
+                  <option value="180">3 mins</option>
+                  <option value="240">4 mins</option>
+                  <option value="300">5 mins</option>
+                </select>
+              </div>
+            </div>
 
-          <div className="flex flex-col gap-1 bg-zinc-950 p-4 rounded-xl border border-zinc-850/80">
-            <h4 className="text-[10px] font-bold tracking-widest text-[#a1a1aa] uppercase font-mono mb-2">RASTER PNG SHOT</h4>
-            <p className="text-[11px] text-zinc-500 leading-relaxed font-sans mb-4">
-              Snap a 3D raster render of the viewport utilizing GPU postprocessing calculations. Transparent channels are fully preserved.
-            </p>
-            <button
-              onClick={onExportPNG}
-              className="w-full py-2.5 bg-zinc-900 border border-zinc-800 hover:bg-zinc-850 text-zinc-100 rounded-lg text-xs font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Download size={14} className="text-zinc-400" />
-              Download PNG Frame
-            </button>
+            <div className="flex flex-col gap-2.5">
+              <button
+                onClick={onExportPNG}
+                className="w-full py-2.5 bg-zinc-900 border border-zinc-800 hover:bg-[#151515] text-zinc-100 rounded-lg text-xs font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <Download size={14} className="text-zinc-400" />
+                Download PNG Frame (.PNG)
+              </button>
+
+              <button
+                onClick={onExportWebM}
+                className={`w-full py-2.5 border text-xs font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 cursor-pointer rounded-lg active:scale-95 ${
+                  recordingStatus === 'recording'
+                    ? 'bg-rose-950/40 border-rose-500 text-rose-300 animate-pulse'
+                    : 'bg-zinc-100 hover:bg-white text-zinc-950 border-zinc-200'
+                }`}
+              >
+                <Video size={14} className={recordingStatus === 'recording' ? 'text-rose-400 animate-spin-slow' : 'text-indigo-600'} />
+                {recordingStatus === 'recording' ? 'Recording WebM Loop...' : 'Download WebM Loop (.WEBM)'}
+              </button>
+            </div>
           </div>
 
           {/* DEVELOPER CODE EXPORTS SYSTEM */}
@@ -3700,8 +3745,8 @@ export default function StandaloneHalftoneViewer() {
             </p>
             
             {/* Inline Tabs for code files */}
-            <div className="grid grid-cols-3 p-0.5 bg-zinc-900 rounded-lg mb-3 border border-zinc-800">
-              {(['react', 'html', 'svg'] as const).map((tab) => (
+            <div className="grid grid-cols-2 p-0.5 bg-zinc-900 rounded-lg mb-3 border border-zinc-800">
+              {(['react', 'html'] as const).map((tab) => (
                 <button
                   key={tab}
                   type="button"
@@ -3722,7 +3767,6 @@ export default function StandaloneHalftoneViewer() {
               <pre className="whitespace-pre-wrap break-all select-all pr-8 overflow-x-hidden w-full">
                 {codeTab === 'react' && getReactCode()}
                 {codeTab === 'html' && getHtmlCode()}
-                {codeTab === 'svg' && (onGetSVGCode?.() ?? '<!-- Please enable vector styles to copy SVG -->')}
               </pre>
 
               {/* Floating Copy Button */}
@@ -3730,9 +3774,7 @@ export default function StandaloneHalftoneViewer() {
                 type="button"
                 onClick={() => {
                   const val = 
-                    codeTab === 'react' ? getReactCode() :
-                    codeTab === 'html' ? getHtmlCode() :
-                    (onGetSVGCode?.() ?? '');
+                    codeTab === 'react' ? getReactCode() : getHtmlCode();
                   handleCopyCode(val);
                 }}
                 className="absolute top-2 right-2 p-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 rounded transition-all active:scale-90 cursor-pointer"

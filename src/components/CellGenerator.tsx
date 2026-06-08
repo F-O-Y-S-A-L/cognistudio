@@ -155,7 +155,17 @@ export default function CellGenerator() {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedHtml, setCopiedHtml] = useState(false);
+  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording'>('idle');
+  const [videoQuality, setVideoQuality] = useState<'720' | '1080' | '1440' | '2160'>('1080');
+  const [videoDuration, setVideoDuration] = useState<number>(20);
   const [showSettings, setShowSettings] = useState(true);
+
+  // Video recording and export refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedBlobsRef = useRef<Blob[]>([]);
+  const isRecordingHighResRef = useRef(false);
+  const recordingScaleRef = useRef(1);
 
   // Refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -373,6 +383,7 @@ export default function CellGenerator() {
     let forceFrames = 20;
 
     const resize = () => {
+      if (isRecordingHighResRef.current) return;
       if (containerRef.current) {
         canvas.width = containerRef.current.clientWidth;
         canvas.height = containerRef.current.clientHeight;
@@ -383,8 +394,8 @@ export default function CellGenerator() {
     resize();
 
     const render = (time: number) => {
-      const w = canvas.width;
-      const h = canvas.height;
+      const w = containerRef.current?.clientWidth || canvas.width;
+      const h = containerRef.current?.clientHeight || canvas.height;
 
       // Ensure points are structured inside spatial partitioning hash grid at start of frame
       gridRef.current.clear();
@@ -533,9 +544,13 @@ export default function CellGenerator() {
         if (p.y > h + 100) p.y = -100;
       });
 
-      // Erase & refresh viewport
+      // Erase & refresh viewport using full raw buffer size
       ctx.fillStyle = theme.bg;
-      ctx.fillRect(0, 0, w, h);
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const renderScale = isRecordingHighResRef.current ? recordingScaleRef.current : 1.0;
+      ctx.save();
+      ctx.scale(renderScale, renderScale);
 
       // Fine-grained paper texture noise
       if (bgTexture) {
@@ -1116,6 +1131,8 @@ export default function CellGenerator() {
         ctx.restore();
       });
 
+      ctx.restore(); // Restore scaled root context pointer
+
       animationFrameId.current = requestAnimationFrame(render);
     };
 
@@ -1235,91 +1252,284 @@ export default function CellGenerator() {
     showToast('High-fidelity PNG captured!');
   };
 
-  const handleExportSVG = () => {
-    const canvas = canvasRef.current;
+  // --- COPY CORE HTML BACKDROP WIDGET DIRECTLY ---
+  const handleCopyHTMLCode = () => {
+    try {
+      const liveScript = `<!-- Self-contained Interactive Organic Cell Backdrop Widget -->
+<div id="organic-cells-container-${Date.now()}" style="position: relative; width: 100%; height: 100vh; overflow: hidden; background: ${theme.bg};">
+  <canvas id="organic-cell-canvas-${Date.now()}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block;"></canvas>
+  <div style="position: absolute; bottom: 12px; right: 16px; font-family: monospace; font-size: 9px; color: ${theme.stroke}55; pointer-events: none; text-transform: uppercase; letter-spacing: 0.1em;">Live Organic Cell Tissue</div>
+</div>
+
+<script>
+  (function() {
+    const container = document.getElementById("organic-cells-container-${Date.now()}");
+    const canvas = document.getElementById("organic-cell-canvas-${Date.now()}");
     if (!canvas) return;
-    const w = canvas.width;
-    const h = canvas.height;
+    const ctx = canvas.getContext("2d");
     
-    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
-    svg += `<rect width="100%" height="100%" fill="${theme.bg}"/>`;
+    let width = canvas.width = container.offsetWidth;
+    let height = canvas.height = container.offsetHeight;
     
-    // Same parametric coords as render loop
-    const inputPoints = pointsRef.current.map(p => {
-      if (geomWarp > 0) {
-        const angle = (p.originalX / w) * Math.PI * 4.0;
-        return [
-          p.x + Math.sin(angle) * geomWarp * 35,
-          p.y + Math.cos(angle) * geomWarp * 35
-        ];
+    // Support responsive resizing seamlessly
+    const resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        width = canvas.width = Math.floor(entry.contentRect.width);
+        height = canvas.height = Math.floor(entry.contentRect.height);
       }
-      return [p.x, p.y];
+    });
+    resizeObserver.observe(container);
+
+    const colors = ${JSON.stringify(theme.colors)};
+    const bgCol = "${theme.bg}";
+    const strokeCol = "${theme.stroke}";
+    
+    // Create organic tissue nodes
+    const nodes = [];
+    const count = ${pointCount};
+    for(let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const r = Math.min(width, height) * 0.25 * Math.sqrt(Math.random());
+      nodes.push({
+        x: width / 2 + Math.cos(angle) * r,
+        y: height / 2 + Math.sin(angle) * r,
+        originX: width / 2 + Math.cos(angle) * r,
+        originY: height / 2 + Math.sin(angle) * r,
+        vx: (Math.random() - 0.5) * ${speed * 4},
+        vy: (Math.random() - 0.5) * ${speed * 4},
+        radius: Math.max(12, Math.random() * 22 + (40 - ${cellPadding} * 0.45) * ${cellScaleMultiplier}),
+        color: colors[i % colors.length]
+      });
+    }
+
+    let mouse = { x: -2000, y: -2000 };
+    container.addEventListener("mousemove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = e.clientX - rect.left;
+      mouse.y = e.clientY - rect.top;
+    });
+    container.addEventListener("mouseleave", () => {
+      mouse.x = -2000;
+      mouse.y = -2000;
     });
 
-    const delaunay = Delaunay.from(inputPoints);
-    const voronoi = delaunay.voronoi([-100, -100, w + 100, h + 100]);
+    function draw() {
+      // Background render
+      ctx.fillStyle = bgCol;
+      ctx.fillRect(0, 0, width, height);
 
-    pointsRef.current.forEach((p, i) => {
-      let cellPolygonPoints: number[][];
-      const isHovered = false;
-      const defaultRadius = Math.max(15, (40 - cellPadding * 0.45) * cellScaleMultiplier);
-      const rad = defaultRadius;
+      // Micro background texture dots if enabled
+      ${bgTexture ? `
+      ctx.fillStyle = strokeCol + "10";
+      for (let x = 0; x < width; x += 40) {
+        for (let y = 0; y < height; y += 40) {
+          ctx.beginPath();
+          ctx.arc(x + 20, y + 20, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ` : ''}
 
-      if (cellGeometryType === 'metaballs') {
-        cellPolygonPoints = getCirclePolygon(p.x, p.y, rad);
-      } else if (cellGeometryType === 'fluid-teardrop') {
-        const angle = Math.atan2(p.vy, p.vx) || (i * 0.3);
-        cellPolygonPoints = getTeardropPolygon(p.x, p.y, rad * 0.85, angle);
-      } else {
-        const rawPolygon = voronoi.cellPolygon(i);
-        if (!rawPolygon) return;
-        cellPolygonPoints = rawPolygon;
-      }
-      
-      let finalPoints = cellPolygonPoints;
-      
-      // Calculate offset polygon if custom shards
-      if (cellGeometryType === 'shards') {
-        finalPoints = cellPolygonPoints.map(([px, py]) => {
-          const dx = px - p.x;
-          const dy = py - p.y;
-          const d = Math.sqrt(dx * dx + dy * dy);
-          const gap = cellPadding * 2.5 + 4.5;
-          const move = Math.max(0, d - gap);
-          const f = d === 0 ? 0 : move / d;
-          const shardX = p.x + dx * f;
-          const shardY = p.y + dy * f;
-          const shardCentroidDist = 0.95;
-          return [
-            p.x + (shardX - p.x) * shardCentroidDist,
-            p.y + (shardY - p.y) * shardCentroidDist
-          ];
-        });
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+
+      // Physics & Node updating
+      for(let i = 0; i < nodes.length; i++) {
+        const p = nodes[i];
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // Soft boundaries bounce
+        if (p.x < 50 || p.x > width - 50) p.vx *= -1;
+        if (p.y < 50 || p.y > height - 50) p.vy *= -1;
+
+        // Magnet attraction or repulsion dynamics
+        if (mouse.x > -1000) {
+          const dx = mouse.x - p.x;
+          const dy = mouse.y - p.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist < ${influenceRadius}) {
+            const force = ((${influenceRadius} - dist) / ${influenceRadius}) * ${magneticStrength * 0.35};
+            const f = ${magneticMode === 'attract' ? 1.0 : -1.0} * force;
+            p.vx += (dx / dist) * f * 0.1;
+            p.vy += (dy / dist) * f * 0.1;
+          }
+        }
+
+        // Limit maximum physical velocity
+        const velLimit = 3.5;
+        const curVel = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+        if (curVel > velLimit) {
+          p.vx = (p.vx / curVel) * velLimit;
+          p.vy = (p.vy / curVel) * velLimit;
+        }
+
+        // Render cell body representation
+        ctx.save();
+        ctx.beginPath();
+        const baseRad = p.radius;
+        // Pulse breathing cycle animation
+        const timeFactor = Date.now() * 0.0015 * ${speed ? speed : 1.0};
+        const breathe = 1.0 + Math.sin(timeFactor + i * 0.8) * ${breatheIntensity * 0.12};
+        const finalRad = baseRad * breathe;
+
+        ctx.arc(p.x, p.y, finalRad, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+
+        // High gloss glass style overlay
+        ctx.strokeStyle = strokeCol;
+        ctx.lineWidth = ${strokeWidth};
+        ctx.stroke();
+
+        // Inner core nucleolus highlight
+        ctx.beginPath();
+        ctx.arc(p.x - finalRad * 0.22, p.y - finalRad * 0.22, finalRad * 0.28, 0, Math.PI*2);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+        ctx.fill();
+
+        ctx.restore();
       }
 
-      if (handDrawn) {
-        finalPoints = getWobblyPath(finalPoints, wobbleAmplitude, wobbleFrequency);
+      // Constellation joints linking overlay
+      for(let i = 0; i < nodes.length; i++) {
+        for(let j = i + 1; j < nodes.length; j++) {
+          const p1 = nodes[i];
+          const p2 = nodes[j];
+          const dx = p1.x - p2.x;
+          const dy = p1.y - p2.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist < 160) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = strokeCol;
+            ctx.lineWidth = (1.0 - dist / 160) * ${strokeWidth * 0.75};
+            ctx.globalAlpha = (1.0 - dist / 160) * 0.35;
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+          }
+        }
       }
-      
-      const pointsStr = finalPoints.map(pt => pt.join(',')).join(' ');
-      
-      // Add double border contour to vector svg
-      if (doubleStroke) {
-        svg += `<polygon points="${pointsStr}" fill="none" stroke="${theme.bg === '#ffffff' ? '#111111' : '#ffffff'}" stroke-width="${strokeWidth * 3.2}" />`;
+
+      requestAnimationFrame(draw);
+    }
+    draw();
+  })();
+</script>`;
+
+      navigator.clipboard.writeText(liveScript);
+      setCopiedHtml(true);
+      showToast('Standalone HTML widget code copied to clipboard!');
+      setTimeout(() => setCopiedHtml(false), 2500);
+    } catch (err) {
+      console.error(err);
+      showToast('Copying snippet failed.');
+    }
+  };
+
+  // --- TRANS CELLULAR WEBM VIDEO EXPORTER ---
+  const handleExportWebM = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      showToast('Error: Canvas coordinate viewport not initialized.');
+      return;
+    }
+
+    if (recordingStatus === 'recording') {
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
       }
-      
-      svg += `<polygon points="${pointsStr}" fill="${p.color}" stroke="${theme.stroke}" stroke-width="${strokeWidth}" />`;
-    });
+      return;
+    }
+
+    const originalWidth = containerRef.current?.clientWidth || canvas.width;
+    const originalHeight = containerRef.current?.clientHeight || canvas.height;
     
-    svg += '</svg>';
+    let targetHeight = parseInt(videoQuality);
+    let scale = targetHeight / originalHeight;
+    
+    // Profile safety: constrain within 3840x2160 to prevent browser MediaRecorder downscaling to 480p
+    let finalWidth = originalWidth * scale;
+    let finalHeight = originalHeight * scale;
+    if (finalWidth > 3840) {
+      scale *= (3840 / finalWidth);
+      finalWidth = originalWidth * scale;
+      finalHeight = originalHeight * scale;
+    }
+    if (finalHeight > 2160) {
+      scale *= (2160 / finalHeight);
+      finalWidth = originalWidth * scale;
+      finalHeight = originalHeight * scale;
+    }
 
-    const blob = new Blob([svg], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `organic-vector-contour-${Date.now()}.svg`;
-    link.click();
-    showToast('Contour vector SVG downloaded!');
+    // Set high-res recording references before grabbing stream
+    isRecordingHighResRef.current = true;
+    recordingScaleRef.current = scale;
+    canvas.width = Math.floor(finalWidth);
+    canvas.height = Math.floor(finalHeight);
+
+    recordedBlobsRef.current = [];
+    const stream = canvas.captureStream(30);
+
+    // Compute high-bitrate targeting to prevent compression artifacts (720p: 6M, 1080p: 15M, 2K: 25M, 4K: 50M)
+    let bBps = 15000000;
+    if (videoQuality === '720') bBps = 6000000;
+    else if (videoQuality === '1440') bBps = 25000000;
+    else if (videoQuality === '2160') bBps = 50000000;
+
+    let options = { 
+      mimeType: 'video/webm;codecs=vp9,opus', 
+      videoBitsPerSecond: bBps 
+    };
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { 
+        mimeType: 'video/webm', 
+        videoBitsPerSecond: bBps 
+      };
+    }
+
+    try {
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      setRecordingStatus('recording');
+      showToast(`Recording: Capturing ${videoDuration}s organic cell tissue in ${videoQuality}p with ${Math.round(bBps / 1000000)}Mbps Bitrate...`);
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedBlobsRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        isRecordingHighResRef.current = false;
+        if (containerRef.current) {
+          canvas.width = containerRef.current.clientWidth;
+          canvas.height = containerRef.current.clientHeight;
+        }
+        setRecordingStatus('idle');
+        const superBuffer = new Blob(recordedBlobsRef.current, { type: 'video/webm' });
+        const videoURL = URL.createObjectURL(superBuffer);
+        const link = document.createElement('a');
+        link.download = `organic-cells-loop-${videoQuality}p-${videoDuration}s-${Date.now()}.webm`;
+        link.href = videoURL;
+        link.click();
+        showToast(`Success: Clean high-fidelity ${videoQuality}p WebM clip downloaded!`);
+      };
+
+      mediaRecorder.start();
+
+      // Enforce dynamic clip duration limit
+      setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop();
+        }
+      }, videoDuration * 1000);
+
+    } catch (err) {
+      console.warn(err);
+      showToast('Media recording blocked in current frame sandbox.');
+    }
   };
 
   const copyConfig = () => {
@@ -1367,7 +1577,7 @@ export default function CellGenerator() {
       </AnimatePresence>
 
       {/* Canvas Viewport Stage */}
-      <div className="flex-1 relative min-h-115 lg:min-h-0 bg-black rounded-xl overflow-hidden border border-white/10 group shadow-2xl">
+      <div className="flex-1 relative min-h-115 lg:min-h-0 bg-[#000] rounded-xl overflow-hidden border border-white/10 group shadow-2xl">
         <canvas 
           ref={canvasRef} 
           onMouseMove={handleMouseMove}
@@ -1396,7 +1606,7 @@ export default function CellGenerator() {
 
         {/* Liquid floating visual cursor glass lens */}
         <div 
-           className="fixed pointer-events-none z-100 w-14 h-14 border border-white/30 rounded-full items-center justify-center mix-blend-difference opacity-0 transition-opacity duration-300 hidden lg:flex"
+           className="fixed pointer-events-none z-[100] w-14 h-14 border border-white/30 rounded-full flex items-center justify-center mix-blend-difference opacity-0 transition-opacity duration-300 hidden lg:flex"
            id="cell-cursor"
            style={{ transform: 'translate(-50%, -50%)' }}
         >
@@ -1413,7 +1623,7 @@ export default function CellGenerator() {
           <motion.div 
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
-            className="w-full lg:w-112.5 shrink-0 flex flex-col bg-[#070707] border border-white/10 rounded-xl overflow-hidden shadow-3xl relative z-10"
+            className="w-full lg:w-[450px] shrink-0 flex flex-col bg-[#070707] border border-white/10 rounded-xl overflow-hidden shadow-3xl relative z-10"
           >
             {/* Control Panel Tab Hub */}
             <div className="flex p-2 bg-black/90 border-b border-white/10 h-16 items-center">
@@ -1441,7 +1651,7 @@ export default function CellGenerator() {
             </div>
 
             {/* Global Animation Controller Status */}
-            <div className="flex items-center justify-between px-8 py-4 bg-white/2 border-b border-white/5 font-mono">
+            <div className="flex items-center justify-between px-8 py-4 bg-white/[0.02] border-b border-white/5 font-mono">
               <span className="text-[10px] uppercase tracking-widest text-white/50 font-bold">Simulation Engine</span>
               <div className="flex items-center gap-3.5">
                 <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded tracking-wider ${isAnimate ? 'text-[#a3e635] bg-[#a3e635]/15 border border-[#a3e635]/20' : 'text-[#f87171] bg-[#f87171]/15 border border-[#f87171]/20'}`}>
@@ -1459,7 +1669,7 @@ export default function CellGenerator() {
               </div>
             </div>
 
-            <div className="grow overflow-y-auto p-8 space-y-10 scrollbar-none max-h-[calc(100vh-220px)]">
+            <div className="flex-grow overflow-y-auto p-8 space-y-10 scrollbar-none max-h-[calc(100vh-220px)]">
               
               {/* --- GEOMETRY TAB --- */}
               {activeTab === 'geometry' && (
@@ -1526,7 +1736,7 @@ export default function CellGenerator() {
                    </div>
 
                    {/* Sketched Hand-draw loops customizer */}
-                   <div className="space-y-4 bg-white/2 p-5 rounded-xl border border-white/5">
+                   <div className="space-y-4 bg-white/[0.02] p-5 rounded-xl border border-white/5">
                       <div className="flex items-center justify-between">
                          <span className="text-[10px] font-bold uppercase text-white/60 tracking-wider font-mono">Wobbly Sketch stroke</span>
                          <button 
@@ -1791,7 +2001,7 @@ export default function CellGenerator() {
                            ))}
                         </div>
                       ) : (
-                        <div className="space-y-4 p-5 bg-white/2 border border-white/5 rounded-xl animate-in zoom-in-95 duration-200">
+                        <div className="space-y-4 p-5 bg-white/[0.02] border border-white/5 rounded-xl animate-in zoom-in-95 duration-200">
                           <div className="grid grid-cols-3 gap-3">
                             <div className="space-y-1.5">
                               <span className="text-[8px] font-mono text-white/30 block uppercase font-bold">Paper/Bg Color</span>
@@ -1943,10 +2153,10 @@ export default function CellGenerator() {
                 <div className="space-y-8 animate-in fade-in duration-300">
                    
                    {/* Dynamic Animation on/off parameter switch toggle */}
-                   <div className="flex items-center justify-between p-4.5 bg-white/3 border border-white/5 rounded-xl">
+                   <div className="flex items-center justify-between p-4.5 bg-white/[0.03] border border-white/5 rounded-xl">
                      <div className="flex flex-col gap-0.5 font-mono">
                        <span className="text-[10px] font-bold uppercase tracking-wider text-yellow-400">Simulation Flow</span>
-                       <span className="text-[8px] text-white/30 uppercase tracking-wider">Toggle cellular physics math processing</span>
+                       <span className="text-[8px] text-white/30 uppercase tracking-[0.05em]">Toggle cellular physics math processing</span>
                      </div>
                      <button 
                        onClick={() => setIsAnimate(!isAnimate)} 
@@ -2121,7 +2331,7 @@ export default function CellGenerator() {
                        <div className="flex items-center justify-between p-4 bg-black/30 border border-white/5 rounded-lg font-mono">
                          <div className="flex flex-col gap-0.5">
                            <span className="text-[9px] font-bold uppercase text-white/40">Inverse concave depression</span>
-                           <span className="text-[7.5px] text-white/35 uppercase tracking-wider">Tiles SINK INWARD instead of RISING UP (Concave Image 4)</span>
+                           <span className="text-[7.5px] text-white/35 uppercase tracking-[0.05em]">Tiles SINK INWARD instead of RISING UP (Concave Image 4)</span>
                          </div>
                          <button 
                            onClick={() => setHoverIsSinking(!hoverIsSinking)} 
@@ -2173,38 +2383,90 @@ export default function CellGenerator() {
               {activeTab === 'export' && (
                 <div className="space-y-8 animate-in inline-fade-in duration-500">
                    <div className="bg-linear-to-br from-yellow-400/20 via-indigo-500/10 to-transparent p-8 rounded-2xl border border-yellow-400/20 space-y-8 text-center ring-1 ring-yellow-400/10 relative overflow-hidden group">
-                      <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-10 transition-opacity" />
+                      <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-10 transition-opacity pointer-events-none" />
                       <div className="space-y-4 relative">
                         <motion.div 
                           animate={{ y: [0, -8, 0] }}
                           transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                           className="w-16 h-16 bg-yellow-400 rounded-2xl flex items-center justify-center mx-auto shadow-[0_0_40px_rgba(250,204,21,0.35)] active:scale-95 transition-transform cursor-pointer"
-                          onClick={handleExportPNG}
+                          onClick={handleCopyHTMLCode}
                         >
-                          <Download size={28} className="text-black" />
+                          <FileCode size={28} className="text-black" />
                         </motion.div>
                         <div className="space-y-2">
-                           <h4 className="text-lg font-bold text-white tracking-tight">Save Artwork</h4>
-                           <p className="text-[9px] text-white/40 font-mono leading-relaxed px-4 uppercase tracking-widest">Lossless vectors and raster capture with wobbly sketch features intact.</p>
+                           <h4 className="text-lg font-bold text-white tracking-tight">Save & Export</h4>
+                           <p className="text-[9px] text-white/40 font-mono leading-relaxed px-4 uppercase tracking-[0.1em]">Generate highly-interactive standalone HTML containers or capture WebM dynamic videos.</p>
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-3.5">
+                      <div className="grid grid-cols-2 gap-3.5 relative z-10">
                          <motion.button 
                            whileHover={{ y: -3, scale: 1.02 }}
                            whileTap={{ scale: 0.98 }}
                            onClick={handleExportPNG} 
-                           className="py-5 bg-yellow-400 hover:bg-yellow-300 text-black font-bold uppercase text-[9px] tracking-[0.18em] rounded-xl transition-all shadow-xl shadow-yellow-400/5 flex flex-col items-center gap-2 cursor-pointer"
+                           className="col-span-2 py-4 bg-yellow-400 hover:bg-yellow-300 text-black font-bold uppercase text-[9px] tracking-[0.18em] rounded-xl transition-all shadow-xl shadow-yellow-400/5 flex flex-col items-center justify-center gap-2 cursor-pointer"
                          >
-                            <Camera size={14} />PNG SNAPSHOT
+                            <Camera size={14} />PNG SNAPSHOT (.PNG)
+                         </motion.button>
+                         
+                         <div className="col-span-1 flex flex-col gap-1.5 mb-1 text-left w-full">
+                            <label className="text-[9px] font-bold text-white/50 uppercase tracking-[0.15em] font-mono">WebM Quality</label>
+                            <select
+                              value={videoQuality}
+                              onChange={(e) => setVideoQuality(e.target.value as any)}
+                              className="w-full bg-black/80 border border-white/20 rounded-xl py-2 px-3 text-[10px] text-zinc-300 font-mono focus:outline-none focus:border-yellow-400 cursor-pointer"
+                            >
+                              <option value="720" className="bg-neutral-950 text-white">720p (HD)</option>
+                              <option value="1080" className="bg-neutral-950 text-white">1080p (FHD)</option>
+                              <option value="1440" className="bg-neutral-950 text-white">1440p (2K)</option>
+                              <option value="2160" className="bg-neutral-950 text-white">2160p (4K)</option>
+                            </select>
+                         </div>
+
+                         <div className="col-span-1 flex flex-col gap-1.5 mb-1 text-left w-full">
+                            <label className="text-[9px] font-bold text-white/50 uppercase tracking-[0.15em] font-mono">Duration</label>
+                            <select
+                              value={videoDuration}
+                              onChange={(e) => setVideoDuration(parseInt(e.target.value))}
+                              className="w-full bg-black/80 border border-white/20 rounded-xl py-2 px-3 text-[10px] text-zinc-300 font-mono focus:outline-none focus:border-yellow-400 cursor-pointer"
+                            >
+                              <option value="3" className="bg-neutral-950 text-white">3 seconds</option>
+                              <option value="10" className="bg-neutral-950 text-white">10 seconds</option>
+                              <option value="20" className="bg-neutral-950 text-white">20 seconds</option>
+                              <option value="30" className="bg-neutral-950 text-white">30 seconds</option>
+                              <option value="60" className="bg-neutral-950 text-white">1 min</option>
+                              <option value="120" className="bg-neutral-950 text-white">2 mins</option>
+                              <option value="180" className="bg-neutral-950 text-white">3 mins</option>
+                              <option value="240" className="bg-neutral-950 text-white">4 mins</option>
+                              <option value="300" className="bg-neutral-950 text-white">5 mins</option>
+                            </select>
+                         </div>
+
+                         <motion.button 
+                           whileHover={{ y: -3, scale: 1.02 }}
+                           whileTap={{ scale: 0.98 }}
+                           onClick={handleCopyHTMLCode} 
+                           className={`py-4 font-bold uppercase text-[9px] tracking-[0.18em] rounded-xl transition-all shadow-xl flex flex-col items-center justify-center gap-2 cursor-pointer border ${
+                             copiedHtml 
+                               ? 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/20' 
+                               : 'bg-white/5 hover:bg-white/10 text-white border-white/10 shadow-md'
+                           }`}
+                         >
+                            <FileCode size={14} className={copiedHtml ? 'animate-bounce' : ''} />
+                            {copiedHtml ? 'HTML COPIED!' : 'COPY HTML CODE'}
                          </motion.button>
                          <motion.button 
                            whileHover={{ y: -3, scale: 1.02 }}
                            whileTap={{ scale: 0.98 }}
-                           onClick={handleExportSVG} 
-                           className="py-5 bg-white/10 hover:bg-white/15 text-white font-bold uppercase text-[9px] tracking-[0.18em] rounded-xl transition-all flex flex-col items-center gap-2 backdrop-blur-md cursor-pointer border border-white/5"
+                           onClick={handleExportWebM} 
+                           className={`py-4 font-bold uppercase text-[9px] tracking-[0.18em] rounded-xl transition-all flex flex-col items-center justify-center gap-2 backdrop-blur-md cursor-pointer border ${
+                             recordingStatus === 'recording'
+                               ? 'bg-rose-600/40 border-rose-500 text-rose-300 animate-pulse'
+                               : 'bg-white/5 hover:bg-white/10 border-white/10 text-white'
+                           }`}
                          >
-                            <Scissors size={14} className="text-indigo-400 animate-pulse" />SVG VECTOR
+                            <Activity size={14} className={recordingStatus === 'recording' ? 'animate-spin' : 'text-indigo-400'} />
+                            {recordingStatus === 'recording' ? 'RECORDING...' : 'WEBM VIDEO (.WEBM)'}
                          </motion.button>
                       </div>
 
@@ -2214,7 +2476,7 @@ export default function CellGenerator() {
                         onClick={copyConfig} 
                         className={`w-full py-4 rounded-xl border font-bold uppercase text-[9px] tracking-[0.25em] flex items-center justify-center gap-3 transition-all cursor-pointer ${copied ? 'bg-green-500/20 border-green-500 text-green-400' : 'bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20'}`}
                       >
-                        {copied ? <Check size={14} /> : <FileCode size={14} />}
+                        {copied ? <Check size={14} /> : <Copy size={14} />}
                         {copied ? 'DESIGN DATA COPIED' : 'COPY CONFIG CODE'}
                       </motion.button>
                    </div>
