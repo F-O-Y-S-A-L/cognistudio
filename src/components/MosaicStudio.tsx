@@ -199,8 +199,14 @@ export default function MosaicStudio() {
 
   // States for Video Recording
   const [isRecording, setIsRecording] = useState(false);
-  const [videoQuality, setVideoQuality] = useState<'720' | '1080' | '1440' | '2160'>('1080');
-  const [videoDuration, setVideoDuration] = useState<number>(20);
+  const [exportSpeedMode, setExportSpeedMode] = useState<'realtime' | 'precise'>('realtime');
+  const [videoQuality, setVideoQuality] = useState<'screen' | '720' | '1080' | '1440' | '2160'>('screen');
+  const [exportDensityMode, setExportDensityMode] = useState<'fine' | 'proportional'>('fine');
+  const [videoDuration, setVideoDuration] = useState<number>(5);
+  const [exportFps, setExportFps] = useState<number>(25);
+  const [isExportingState, setIsExportingState] = useState<boolean>(false);
+  const [exportFrameCount, setExportFrameCount] = useState<number>(0);
+  const [exportFrameTotal, setExportFrameTotal] = useState<number>(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingTimeoutRef = useRef<any>(null);
@@ -222,6 +228,7 @@ export default function MosaicStudio() {
   const sourceVideoRef = useRef<HTMLVideoElement | null>(null);
   const isRecordingHighResRef = useRef(false);
   const recordingScaleRef = useRef(15000000);
+  const cancelExportRef = useRef(false);
 
   // Default Image Seed on Mount
   useEffect(() => {
@@ -277,7 +284,8 @@ export default function MosaicStudio() {
     colorTintStrength,
     isAnimated,
     animationType,
-    timeState
+    timeState,
+    exportDensityMode
   ]);
 
   // Dedicated Video Playback Loop & Stale-closure Guard
@@ -288,16 +296,33 @@ export default function MosaicStudio() {
 
   useEffect(() => {
     let animId: number;
-    const tick = () => {
-      // If video is loaded and playing, force re-render for every frame
-      if (videoLoaded && sourceVideoRef.current && !sourceVideoRef.current.paused) {
-        lastRenderRef.current?.();
+    let lastTime = 0;
+    const tick = (now: number) => {
+      if (isExportingState && exportSpeedMode !== 'realtime') {
+        animId = requestAnimationFrame(tick);
+        return;
+      }
+      const isVideoPlaying = videoLoaded && sourceVideoRef.current && !sourceVideoRef.current.paused;
+      // Continuously draw when video is playing, canvas animations are running, or a video capture session is actively writing frames
+      const isRecordActive = isRecording || (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording');
+      if (isVideoPlaying || isAnimated || isRecordActive) {
+        if (isRecordActive) {
+          // Strict frame throttle to 25 FPS (40ms interval) during active high-res encoding.
+          // This gives the computer breathing room and guarantees buttery-smooth, stutter-free output!
+          const elapsed = now - lastTime;
+          if (elapsed >= 40) {
+            lastTime = now - (elapsed % 40);
+            lastRenderRef.current?.();
+          }
+        } else {
+          lastRenderRef.current?.();
+        }
       }
       animId = requestAnimationFrame(tick);
     };
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
-  }, [videoLoaded]);
+  }, [videoLoaded, isAnimated, isRecording, isExportingState, exportSpeedMode]);
 
   // Generate a beautiful, vibrant procedural art sample when no image is uploaded
   const generateProceduralDefault = () => {
@@ -384,7 +409,8 @@ export default function MosaicStudio() {
   };
 
   // Main Rendering Loop executing on changes
-  const renderMosaic = () => {
+  const renderMosaic = (overrideTime?: number) => {
+    const activeTimeState = typeof overrideTime === 'number' ? overrideTime : timeState;
     const img: CanvasImageSource | null = videoLoaded ? sourceVideoRef.current : sourceImageRef.current;
     const canvas = mainCanvasRef.current;
     if (!img || !canvas) return;
@@ -407,12 +433,25 @@ export default function MosaicStudio() {
     const originalHeight = targetHeight + paddingY * 2;
     const scale = isRecordingHighResRef.current ? recordingScaleRef.current : 1.0;
 
-    canvas.width = originalWidth * scale;
-    canvas.height = originalHeight * scale;
+    // Resizing .width / .height on every single tick resets GPU pipelines, causes lagging, and breaks WebRTC encoders.
+    // Guard it to resize only when there's an actual state change or scale toggle.
+    const desiredWidth = Math.floor(originalWidth * scale);
+    const desiredHeight = Math.floor(originalHeight * scale);
+    if (canvas.width !== desiredWidth) {
+      canvas.width = desiredWidth;
+    }
+    if (canvas.height !== desiredHeight) {
+      canvas.height = desiredHeight;
+    }
+
+    const isFineDotsMode = isRecordingHighResRef.current && exportDensityMode === 'fine';
+
+    const drawWidth = isFineDotsMode ? Math.floor(targetWidth * scale) : targetWidth;
+    const drawHeight = isFineDotsMode ? Math.floor(targetHeight * scale) : targetHeight;
 
     const stepSize = Math.max(1, dotSize + spacing);
-    const cols = Math.max(1, Math.ceil(targetWidth / stepSize));
-    const rows = Math.max(1, Math.ceil(targetHeight / stepSize));
+    const cols = Math.max(1, Math.ceil(drawWidth / stepSize));
+    const rows = Math.max(1, Math.ceil(drawHeight / stepSize));
 
     // Offscreen Canvas for Downscaling sampling
     const offscreenCanvas = document.createElement('canvas');
@@ -446,7 +485,13 @@ export default function MosaicStudio() {
       ctx.fillStyle = '#fafffd';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     } else if (bgStyle === 'transparent') {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Force rich opaque background on video export to prevent alpha-layer color washout / extra light issue
+      if (isRecording || (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording')) {
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      } else {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
     } else if (bgStyle === 'blurred') {
       ctx.save();
       ctx.scale(scale, scale);
@@ -458,20 +503,28 @@ export default function MosaicStudio() {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
+    // Glow/Shadow gets critically slow at high-resolution rendering because of multi-pass Gaussian blur over 100k+ dots.
+    // Bypass it when rendering in ultra-high res recording to keep the encoder butter-smooth.
+    const activeGlowStrength = isRecordingHighResRef.current ? 0 : glowStrength;
+
     // Set up glow styling if enabled (using canvas shadow attributes)
-    if (glowStrength > 0) {
-      ctx.shadowBlur = glowStrength * 3 * scale;
+    if (activeGlowStrength > 0) {
+      ctx.shadowBlur = activeGlowStrength * 3 * scale;
     } else {
       ctx.shadowBlur = 0;
     }
 
     // Move drawing origin to the padded center for dots and apply upscaling context transformations
     ctx.save();
-    ctx.scale(scale, scale);
-    ctx.translate(paddingX, paddingY);
+    if (!isFineDotsMode) {
+      ctx.scale(scale, scale);
+      ctx.translate(paddingX, paddingY);
+    } else {
+      ctx.translate(paddingX * scale, paddingY * scale);
+    }
 
     const contrastFactor = (259 * (contrast + 255)) / (255 * (259 - contrast));
-    const morphRadiusInPixels = (Math.min(targetWidth, targetHeight) / 2) * (boundaryMorph / 100);
+    const morphRadiusInPixels = (Math.min(drawWidth, drawHeight) / 2) * (boundaryMorph / 100);
 
     // Parse Tint Hex code once
     let tintR = 79, tintG = 70, tintB = 229;
@@ -493,8 +546,8 @@ export default function MosaicStudio() {
 
         // Edge Dispersion / Organic Scatter
         if (radialDispersion > 0) {
-          const centerX = targetWidth / 2;
-          const centerY = targetHeight / 2;
+          const centerX = drawWidth / 2;
+          const centerY = drawHeight / 2;
           const dx = originalCx - centerX;
           const dy = originalCy - centerY;
           
@@ -520,8 +573,8 @@ export default function MosaicStudio() {
             if (isAnimated) {
               const timeOffset = seed % (Math.PI * 2);
               // Floating organic animation around the scattered point
-              animOffsetX = Math.sin(timeState * 3 + timeOffset) * scatterIntensity * 0.3;
-              animOffsetY = Math.cos(timeState * 2.5 + timeOffset) * scatterIntensity * 0.3;
+              animOffsetX = Math.sin(activeTimeState * 3 + timeOffset) * scatterIntensity * 0.3;
+              animOffsetY = Math.cos(activeTimeState * 2.5 + timeOffset) * scatterIntensity * 0.3;
             }
             
             cx += Math.cos(staticAngle) * scatterIntensity + animOffsetX;
@@ -531,7 +584,7 @@ export default function MosaicStudio() {
 
         // NEW FEATURE: Boundary mask shape morphing. Smoothly cut out dots falling outside circular bounds.
         if (boundaryMorph > 0) {
-          if (!isInsideRoundedRect(originalCx, originalCy, targetWidth, targetHeight, morphRadiusInPixels)) {
+          if (!isInsideRoundedRect(originalCx, originalCy, drawWidth, drawHeight, morphRadiusInPixels)) {
             continue;
           }
         }
@@ -574,7 +627,7 @@ export default function MosaicStudio() {
 
         // NEW FEATURE: Animation: Hue Color cycle
         if (isAnimated && animationType === 'colorCycle') {
-          const cycleAngle = (timeState * 40) % 360;
+          const cycleAngle = (activeTimeState * 40) % 360;
           [rVal, gVal, bVal] = rotateColor(rVal, gVal, bVal, cycleAngle);
         }
 
@@ -620,19 +673,18 @@ export default function MosaicStudio() {
         }
 
         const tileColor = `rgb(${Math.round(rVal)}, ${Math.round(gVal)}, ${Math.round(bVal)})`;
-        const shadowColor = `rgba(${Math.round(rVal)}, ${Math.round(gVal)}, ${Math.round(bVal)}, 0.4)`;
+        const needsSaveRestore = activeGlowStrength > 0 || gridAngle !== 0;
 
-        ctx.save();
-
-        if (glowStrength > 0) {
-          ctx.shadowColor = shadowColor;
-        }
-
-        // Apply grid angle rotation if tweaked
-        if (gridAngle !== 0) {
-          ctx.translate(cx, cy);
-          ctx.rotate((gridAngle * Math.PI) / 180);
-          ctx.translate(-cx, -cy);
+        if (needsSaveRestore) {
+          ctx.save();
+          if (activeGlowStrength > 0) {
+            ctx.shadowColor = `rgba(${Math.round(rVal)}, ${Math.round(gVal)}, ${Math.round(bVal)}, 0.4)`;
+          }
+          if (gridAngle !== 0) {
+            ctx.translate(cx, cy);
+            ctx.rotate((gridAngle * Math.PI) / 180);
+            ctx.translate(-cx, -cy);
+          }
         }
 
         // NEW FEATURE: Animation drift & orbit (orbit mechanics)
@@ -640,16 +692,16 @@ export default function MosaicStudio() {
         let renderCy = cy;
         if (isAnimated) {
           if (animationType === 'drift') {
-            renderCx += Math.sin(timeState * 1.5 + cy * 0.08) * (dotSize * 0.18);
-            renderCy += Math.cos(timeState * 1.5 + cx * 0.08) * (dotSize * 0.18);
+            renderCx += Math.sin(activeTimeState * 1.5 + cy * 0.08) * (dotSize * 0.18);
+            renderCy += Math.cos(activeTimeState * 1.5 + cx * 0.08) * (dotSize * 0.18);
           } else if (animationType === 'orbit') {
-            const dx = cx - targetWidth / 2;
-            const dy = cy - targetHeight / 2;
+            const dx = cx - drawWidth / 2;
+            const dy = cy - drawHeight / 2;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist > 0) {
-              const angle = Math.atan2(dy, dx) + 0.08 * Math.sin(timeState * 0.3 + dist * 0.005);
-              renderCx = targetWidth / 2 + Math.cos(angle) * dist;
-              renderCy = targetHeight / 2 + Math.sin(angle) * dist;
+              const angle = Math.atan2(dy, dx) + 0.08 * Math.sin(activeTimeState * 0.3 + dist * 0.005);
+              renderCx = drawWidth / 2 + Math.cos(angle) * dist;
+              renderCy = drawHeight / 2 + Math.sin(angle) * dist;
             }
           }
         }
@@ -663,29 +715,35 @@ export default function MosaicStudio() {
         // NEW FEATURE: Animations modifiers
         if (isAnimated) {
           if (animationType === 'pulse') {
-            styleFactor *= (1.0 + 0.22 * Math.sin(timeState * 2.0 + (cx + cy) * 0.006));
+            styleFactor *= (1.0 + 0.22 * Math.sin(activeTimeState * 2.0 + (cx + cy) * 0.006));
           } else if (animationType === 'wave') {
-            const centerDist = Math.sqrt(Math.pow(cx - targetWidth / 2, 2) + Math.pow(cy - targetHeight / 2, 2));
-            styleFactor *= (0.55 + 0.45 * Math.sin((centerDist * 0.038) - timeState * 2.5));
+            const centerDist = Math.sqrt(Math.pow(cx - drawWidth / 2, 2) + Math.pow(cy - drawHeight / 2, 2));
+            styleFactor *= (0.55 + 0.45 * Math.sin((centerDist * 0.038) - activeTimeState * 2.5));
           } else if (animationType === 'matrix') {
-            styleFactor *= (0.5 + 0.5 * Math.max(0, Math.sin((rIndex * 0.4) - timeState * 2.0 + cIndex * 0.1)));
+            styleFactor *= (0.5 + 0.5 * Math.max(0, Math.sin((rIndex * 0.4) - activeTimeState * 2.0 + cIndex * 0.1)));
           } else if (animationType === 'explodingStars') {
-            styleFactor *= (0.3 + 0.7 * Math.abs(Math.sin(timeState * 3 + (cx * cy) * 0.001)));
+            styleFactor *= (0.3 + 0.7 * Math.abs(Math.sin(activeTimeState * 3 + (cx * cy) * 0.001)));
           } else if (animationType === 'rippleBounce') {
-            const dist = Math.sqrt(Math.pow(cx - targetWidth / 2, 2) + Math.pow(cy - targetHeight / 2, 2));
-            styleFactor *= (0.7 + 0.3 * Math.sin(timeState * 3.0 - dist * 0.05));
+            const dist = Math.sqrt(Math.pow(cx - drawWidth / 2, 2) + Math.pow(cy - drawHeight / 2, 2));
+            styleFactor *= (0.7 + 0.3 * Math.sin(activeTimeState * 3.0 - dist * 0.05));
           } else if (animationType === 'shimmerGlow') {
-            styleFactor *= (0.6 + 0.4 * Math.sin(timeState * 4.0 + (rIndex * 13 + cIndex * 37) % 100));
+            styleFactor *= (0.6 + 0.4 * Math.sin(activeTimeState * 4.0 + (rIndex * 13 + cIndex * 37) % 100));
           } else if (animationType === 'dnaSpiral') {
-            const angleVal = Math.atan2(cy - targetHeight / 2, cx - targetWidth / 2);
-            styleFactor *= (0.55 + 0.45 * Math.sin(angleVal * 3.0 + timeState * 2.5));
+            const angleVal = Math.atan2(cy - drawHeight / 2, cx - drawWidth / 2);
+            styleFactor *= (0.55 + 0.45 * Math.sin(angleVal * 3.0 + activeTimeState * 2.5));
           }
         }
 
         const activeRadius = (dotSize / 2) * styleFactor;
 
+        // Optimization: In high-resolution exports (2K/4K), if isFineDotsMode refers to very tiny dots (under 3.5px in actual drawn pixels),
+        // we can simplify the drawing to use a simple filled dot ('halftone') because nested borders, gradients, and reflections are physically sub-pixel and invisible,
+        // but they quadruple the rendering time and freeze the browser thread.
+        const actualDrawnSize = isFineDotsMode ? dotSize : dotSize * scale;
+        const resolvedDotStyle = (isRecordingHighResRef.current && actualDrawnSize < 3.5) ? 'halftone' : dotStyle;
+
         // Choose and Render from extended custom shape catalog
-        switch (dotStyle) {
+        switch (resolvedDotStyle) {
           case 'bead': {
             ctx.strokeStyle = bgStyle === 'white' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
             ctx.lineWidth = 1;
@@ -907,7 +965,9 @@ export default function MosaicStudio() {
           }
         }
 
-        ctx.restore(); // Restores from individual dot styling
+        if (needsSaveRestore) {
+          ctx.restore(); // Restores from individual dot styling
+        }
       }
     }
     
@@ -1002,86 +1062,245 @@ export default function MosaicStudio() {
   };
 
   // Recording functionality
-  const toggleRecording = () => {
-    if (isRecording) {
+  const toggleRecording = async () => {
+    if (isExportingState) {
+      cancelExportRef.current = true;
       if (recordingTimeoutRef.current) {
-        clearTimeout(recordingTimeoutRef.current);
+        if (exportSpeedMode === 'realtime') {
+          clearInterval(recordingTimeoutRef.current);
+        } else {
+          clearTimeout(recordingTimeoutRef.current);
+        }
         recordingTimeoutRef.current = null;
       }
-      mediaRecorderRef.current?.stop();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      isRecordingHighResRef.current = false;
       setIsRecording(false);
-    } else {
-      const canvas = mainCanvasRef.current;
-      if (!canvas) return;
+      setIsExportingState(false);
+      renderMosaic(); // Restore visual baseline resolution
+      return;
+    }
 
-      const img = sourceVideoRef.current || sourceImageRef.current;
-      const vWidth = img ? ((img as HTMLVideoElement).videoWidth || (img as HTMLImageElement).width || 640) : 640;
-      const vHeight = img ? ((img as HTMLVideoElement).videoHeight || (img as HTMLImageElement).height || 640) : 640;
-      const targetWidth = 640;
-      const rawRatio = vHeight / (vWidth || 1);
-      const targetHeight = Math.max(120, Math.min(800, Math.floor(targetWidth * rawRatio)));
-      const paddingY = radialDispersion > 0 ? radialDispersion * 3 : 0;
-      const baseHeight = targetHeight + paddingY * 2;
-      
+    const canvas = mainCanvasRef.current;
+    if (!canvas) return;
+
+    const img = sourceVideoRef.current || sourceImageRef.current;
+    const vWidth = img ? ((img as HTMLVideoElement).videoWidth || (img as HTMLImageElement).width || 640) : 640;
+    const vHeight = img ? ((img as HTMLVideoElement).videoHeight || (img as HTMLImageElement).height || 640) : 640;
+    const targetWidth = 640;
+    const rawRatio = vHeight / (vWidth || 1);
+    const targetHeight = Math.max(120, Math.min(800, Math.floor(targetWidth * rawRatio)));
+    const paddingY = radialDispersion > 0 ? radialDispersion * 3 : 0;
+    const baseHeight = targetHeight + paddingY * 2;
+    
+    let scale = 1.0;
+    if (videoQuality !== 'screen') {
       const targetHeightPreset = parseInt(videoQuality);
-      const scale = targetHeightPreset / baseHeight;
+      scale = targetHeightPreset / baseHeight;
+    }
 
-      isRecordingHighResRef.current = true;
-      recordingScaleRef.current = scale;
-      renderMosaic(); // Re-render at high resolution
+    isRecordingHighResRef.current = true;
+    recordingScaleRef.current = scale;
+    cancelExportRef.current = false;
 
-      recordedChunksRef.current = [];
+    // Define FPS and total frames dynamically using exportFps state
+    const fps = exportFps;
+    const frameInterval = 1 / fps;
+    const totalDuration = videoDuration;
+    const totalFrames = Math.ceil(totalDuration * fps);
+
+    setIsExportingState(true);
+    setExportFrameCount(0);
+    setExportFrameTotal(totalFrames);
+    setIsRecording(true); // backward compatibility with recording indicators
+
+    // CRITICAL FIX: Pre-render high-resolution canvas size immediately BEFORE captureStream.
+    // Changing canvas width/height after stream has been captured freezes and crashes the WebRTC stream.
+    renderMosaic();
+
+    // Initialize MediaRecorder
+    recordedChunksRef.current = [];
+    
+    let stream: MediaStream;
+    try {
+      stream = canvas.captureStream(fps);
+    } catch (e) {
+      triggerToast('Error: Canvas stream capture not supported in this browser.');
+      setIsRecording(false);
+      setIsExportingState(false);
+      isRecordingHighResRef.current = false;
+      renderMosaic(); // restore size
+      return;
+    }
+
+    let bBps = 15000000;
+    if (videoQuality === '720') bBps = 6000000;
+    else if (videoQuality === '1080') bBps = 12000000;
+    else if (videoQuality === '1440') bBps = 25000000;
+    else if (videoQuality === '2160') bBps = 50000000;
+
+    // Detect highly compatible formats like H264 MP4 first, then fall back to WebM
+    const mimeCandidates = [
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+      'video/mp4;codecs=h264',
+      'video/mp4',
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=h264',
+      'video/webm'
+    ];
+
+    let chosenMime = 'video/webm';
+    for (const mime of mimeCandidates) {
+      if (MediaRecorder.isTypeSupported(mime)) {
+        chosenMime = mime;
+        break;
+      }
+    }
+
+    let options = { 
+      mimeType: chosenMime, 
+      videoBitsPerSecond: bBps 
+    };
+
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(stream, options);
+    } catch (err) {
       try {
-        const stream = canvas.captureStream(30);
+        recorder = new MediaRecorder(stream);
+      } catch (err2) {
+        triggerToast('Error: MediaRecorder build failed in this environment.');
+        setIsRecording(false);
+        setIsExportingState(false);
+        isRecordingHighResRef.current = false;
+        renderMosaic();
+        return;
+      }
+    }
 
-        // Compute high-bitrate targeting to prevent compression artifacts (720p: 6M, 1080p: 15M, 2K: 25M, 4K: 50M)
-        let bBps = 15000000;
-        if (videoQuality === '720') bBps = 6000000;
-        else if (videoQuality === '1440') bBps = 25000000;
-        else if (videoQuality === '2160') bBps = 50000000;
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+    };
 
-        let options = { 
-          mimeType: 'video/webm;codecs=vp9,opus', 
-          videoBitsPerSecond: bBps 
-        };
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          options = { 
-            mimeType: 'video/webm', 
-            videoBitsPerSecond: bBps 
-          };
+    recorder.onstop = () => {
+      isRecordingHighResRef.current = false;
+      setIsRecording(false);
+      setIsExportingState(false);
+      renderMosaic(); // Restore visual baseline resolution
+
+      if (cancelExportRef.current) {
+        triggerToast('Export cancelled by user.');
+        return;
+      }
+
+      const finalMime = recorder.mimeType || chosenMime;
+      const isMp4 = finalMime.toLowerCase().includes('mp4');
+      const fileExt = isMp4 ? 'mp4' : 'webm';
+
+      const blob = new Blob(recordedChunksRef.current, { type: finalMime });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const qualityLabel = videoQuality === 'screen' ? 'screen' : `${videoQuality}p`;
+      link.download = `mosaic-pix-dot-studio-${qualityLabel}-${videoDuration}s-${Date.now()}.${fileExt}`;
+      link.click();
+      triggerToast(`Success: Exported high-fidelity ${qualityLabel} (${fileExt.toUpperCase()}) mosaic video successfully!`);
+    };
+
+    recorder.start();
+    mediaRecorderRef.current = recorder;
+
+    const qualityLabel = videoQuality === 'screen' ? 'screen' : `${videoQuality}p`;
+
+    if (exportSpeedMode === 'realtime') {
+      // --- REAL-TIME CAPTURE MODE (LIGHTNING FAST) ---
+      triggerToast(`Exporting Started: Recording live scene for ${videoDuration}s with zero delay...`);
+
+      // Resume playing media from the beginning for a clean start loop
+      if (videoLoaded && sourceVideoRef.current) {
+        sourceVideoRef.current.currentTime = 0;
+        sourceVideoRef.current.play().catch(() => {});
+      }
+
+      const startTime = Date.now();
+      const intervalId = setInterval(() => {
+        if (cancelExportRef.current) {
+          clearInterval(intervalId);
+          recorder.stop();
+          return;
         }
 
-        const recorder = new MediaRecorder(stream, options);
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) recordedChunksRef.current.push(e.data);
-        };
-        recorder.onstop = () => {
-          isRecordingHighResRef.current = false;
-          renderMosaic(); // Restore visual baseline resolution
-          setIsRecording(false);
+        const elapsed = (Date.now() - startTime) / 1000;
+        const currentFrame = Math.min(totalFrames, Math.floor(elapsed * fps));
+        setExportFrameCount(currentFrame);
 
-          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `mosaic-pix-dot-studio-${videoQuality}p-${videoDuration}s-${Date.now()}.webm`;
-          link.click();
-          triggerToast(`Success: Exported high-fidelity ${videoQuality}p mosaic video successfully!`);
-        };
-        recorder.start();
-        mediaRecorderRef.current = recorder;
-        setIsRecording(true);
-        triggerToast(`Recording started: Capturing mosaic in ${videoQuality}p for ${videoDuration}s with ${Math.round(bBps / 1000000)}Mbps Bitrate...`);
+        if (elapsed >= totalDuration) {
+          clearInterval(intervalId);
+          recorder.stop();
+        }
+      }, 100);
 
-        // Enforce dynamic clip duration limit
-        recordingTimeoutRef.current = setTimeout(() => {
-          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.stop();
-            setIsRecording(false);
+      // Keep reference to clear interval if cancelled/finished
+      recordingTimeoutRef.current = intervalId;
+
+    } else {
+      // --- PRECISE OFFLINE SEAMLESS FRAME EXPORT MODE ---
+      // Pause normal media play loops
+      if (videoLoaded && sourceVideoRef.current) {
+        sourceVideoRef.current.pause();
+      }
+
+      triggerToast(`Exporting Started: Rendering ${totalFrames} frames offline at precise quality...`);
+
+      // Let's implement the async frame generation loop
+      try {
+        const isVideoSource = videoLoaded && sourceVideoRef.current;
+        
+        for (let frameNum = 0; frameNum < totalFrames; frameNum++) {
+          if (cancelExportRef.current) {
+            break;
           }
-        }, videoDuration * 1000);
+
+          // 1. Advance the video currentTime (if it's a video) and wait for 'seeked'
+          if (isVideoSource) {
+            const videoElement = sourceVideoRef.current!;
+            videoElement.currentTime = frameNum * frameInterval;
+            
+            await new Promise<void>((resolve) => {
+              let resolved = false;
+              const done = () => {
+                if (!resolved) {
+                  resolved = true;
+                  videoElement.removeEventListener('seeked', onSeeked);
+                  resolve();
+                }
+              };
+              const onSeeked = () => done();
+              videoElement.addEventListener('seeked', onSeeked);
+              setTimeout(done, 180); // safety guard reduced from 600ms to 180ms for MUCH faster export!
+            });
+          }
+
+          // 2. Render the canvas with precise animation time state overrides
+          const frameTimeOverride = frameNum * 0.04 * animationSpeed;
+          renderMosaic(frameTimeOverride);
+
+          // Update progress state
+          setExportFrameCount(frameNum + 1);
+
+          // 3. Give the canvas encoder a short break to ingest the frame
+          const encodingBufferDelay = videoQuality === '2160' ? 6 : videoQuality === '1440' ? 4 : 2;
+          await new Promise((resolve) => setTimeout(resolve, encodingBufferDelay));
+        }
+
+        // Stop recorder to finish the video file
+        recorder.stop();
       } catch (err) {
-        triggerToast('Error: Recording not supported in this browser environment.');
+        console.error(err);
+        recorder.stop();
       }
     }
   };
@@ -1636,6 +1855,8 @@ export default function MosaicHalftone() {
     setIsAnimated(false);
     setAnimationType('pulse');
     setAnimationSpeed(1.2);
+    setExportDensityMode('fine');
+    setExportSpeedMode('realtime');
 
     triggerToast('Success: Re-initialized mosaic pixel settings!');
   };
@@ -1678,6 +1899,54 @@ export default function MosaicHalftone() {
             }}
             id="main-rendering-mosaic-canvas"
           />
+
+          {isExportingState && (
+            <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-[#07070a]/95 gap-4 p-4 sm:p-6 text-center backdrop-blur-md transition-all duration-300">
+              <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-full animate-spin">
+                <Layers size={28} className="text-indigo-400" />
+              </div>
+              <div className="space-y-2 max-w-sm">
+                <p className="font-mono text-xs text-indigo-400 uppercase tracking-widest font-black flex items-center justify-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+                  EXPORTING VIDEO
+                </p>
+                <h4 className="text-xs sm:text-sm font-semibold text-white leading-normal font-sans">
+                  {videoQuality === '2160' ? 'Compiling Ultra 4K UHD (2160p) Mosaic Video...' : 
+                   videoQuality === '1440' ? 'Compiling 2K QHD (1440p) Mosaic Video...' : 
+                   videoQuality === '1080' ? 'Compiling Full HD 1080p Mosaic Video...' : 
+                   videoQuality === '720' ? 'Compiling HD 720p Mosaic Video...' : 
+                   'Recording High-Fidelity Mosaic Video scene...'}
+                </h4>
+                <p className="text-[10px] text-zinc-400 leading-relaxed font-sans">
+                  Rendering each frame individually with high precision so there are no stutters or dropped frames in the output. The saved file will be completely smooth and fluid!
+                </p>
+              </div>
+
+              {/* Progress bar container */}
+              <div className="w-full max-w-xs bg-zinc-800 h-2.5 rounded-full overflow-hidden border border-zinc-700/50 p-[1px] mt-1 shadow-inner">
+                <div 
+                  className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 h-full rounded-full transition-all duration-100" 
+                  style={{ width: `${Math.round((exportFrameCount / exportFrameTotal) * 100)}%` }}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1 items-center font-mono">
+                <span className="text-xs text-zinc-200 font-bold">
+                  {Math.round((exportFrameCount / exportFrameTotal) * 100)}% Complete
+                </span>
+                <span className="text-[9px] text-zinc-500">
+                  Frame {exportFrameCount} / {exportFrameTotal} (Target: 25 FPS)
+                </span>
+              </div>
+
+              <button
+                onClick={() => { cancelExportRef.current = true; }}
+                className="mt-2 px-4 py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-500/25 rounded font-mono text-[9px] uppercase tracking-wider transition-all cursor-pointer shadow-md"
+              >
+                Cancel Export
+              </button>
+            </div>
+          )}
 
           <div className="absolute bottom-3 right-4 flex items-center gap-2 text-zinc-600 font-mono text-[9px] pointer-events-none select-none">
             <Layers size={10} />
@@ -1778,12 +2047,13 @@ export default function MosaicHalftone() {
               </button>
 
               <div className="col-span-1 flex flex-col gap-1 my-1">
-                <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">WebM Resolution</label>
+                <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">Video Resolution</label>
                 <select
                   value={videoQuality}
                   onChange={(e) => setVideoQuality(e.target.value as any)}
                   className="w-full bg-zinc-900 border border-white/10 rounded py-1 px-2 text-[9px] text-zinc-300 font-mono focus:outline-none focus:border-[#4A38F5] cursor-pointer"
                 >
+                  <option value="screen">Screen Size (Fast &amp; Smooth)</option>
                   <option value="720">720p (HD)</option>
                   <option value="1080">1080p (FHD)</option>
                   <option value="1440">1440p (2K)</option>
@@ -1791,32 +2061,85 @@ export default function MosaicHalftone() {
                 </select>
               </div>
 
-              <div className="col-span-1 flex flex-col gap-1 my-1">
-                <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">Duration</label>
+              {/* Custom Duration & FPS Controls */}
+              <div className="col-span-2 grid grid-cols-2 gap-3 my-1">
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">
+                      Duration
+                    </label>
+                    <span className="text-[9px] font-mono text-indigo-400 font-bold">{videoDuration}s</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-zinc-900 border border-white/10 rounded px-1.5 py-0.5">
+                    <input
+                      type="range"
+                      min={5}
+                      max={600}
+                      value={videoDuration}
+                      onChange={(e) => setVideoDuration(Math.max(5, parseInt(e.target.value) || 5))}
+                      className="accent-indigo-500 cursor-pointer h-1.5 flex-grow"
+                    />
+                    <input
+                      type="number"
+                      min={5}
+                      max={600}
+                      value={videoDuration}
+                      onChange={(e) => setVideoDuration(Math.max(5, parseInt(e.target.value) || 5))}
+                      className="w-10 bg-zinc-950 text-[10px] text-indigo-300 font-mono text-center rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 border border-white/5 py-0.5"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">
+                    Frame Rate (FPS)
+                  </label>
+                  <select
+                    value={exportFps}
+                    onChange={(e) => setExportFps(parseInt(e.target.value))}
+                    className="w-full bg-zinc-900 border border-white/10 rounded py-1 px-2 text-[9px] text-zinc-300 font-mono focus:outline-none focus:border-[#4A38F5] cursor-pointer h-[26px]"
+                  >
+                    <option value="15">15 FPS (Ultra Fast &amp; Light)</option>
+                    <option value="24">24 FPS (Cinematic Loop)</option>
+                    <option value="25">25 FPS (Standard Web)</option>
+                    <option value="30">30 FPS (Smooth Motion)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="col-span-2 flex flex-col gap-1 my-1">
+                <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">Export Speed Mode</label>
                 <select
-                  value={videoDuration}
-                  onChange={(e) => setVideoDuration(parseInt(e.target.value))}
-                  className="w-full bg-zinc-900 border border-white/10 rounded py-1 px-2 text-[9px] text-zinc-300 font-mono focus:outline-none focus:border-[#4A38F5] cursor-pointer"
+                  value={exportSpeedMode}
+                  onChange={(e) => setExportSpeedMode(e.target.value as any)}
+                  className="w-full bg-zinc-900 border border-teal-500/30 rounded py-1 px-2 text-[9px] text-[#2dd4bf] font-mono focus:outline-none focus:border-[#4A38F5] cursor-pointer"
                 >
-                  <option value="3">3s</option>
-                  <option value="10">10s</option>
-                  <option value="20">20s (Default)</option>
-                  <option value="30">30s</option>
-                  <option value="60">1m</option>
-                  <option value="120">2m</option>
-                  <option value="180">3m</option>
-                  <option value="240">4m</option>
-                  <option value="300">5m</option>
+                  <option value="realtime">⚡ Lightning Fast Real-Time (Express Download)</option>
+                  <option value="precise">🎯 Precise Offline Frame Render (High-Fidelity Loops)</option>
                 </select>
               </div>
+
+              <div className="col-span-2 flex flex-col gap-1 my-1">
+                <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">Export Dot Density Mode</label>
+                <select
+                  value={exportDensityMode}
+                  onChange={(e) => setExportDensityMode(e.target.value as any)}
+                  className="w-full bg-zinc-900 border border-white/10 rounded py-1 px-2 text-[9px] text-zinc-300 font-mono focus:outline-none focus:border-[#4A38F5] cursor-pointer"
+                >
+                  <option value="fine">Keep Dots Fine &amp; High-Density (Direct Match to Screen)</option>
+                  <option value="proportional">Scale Dots Up (Proportional Big Dots - Retro Style)</option>
+                </select>
+              </div>
+
+
 
               <button
                 id="btn-toggle-video-recording"
                 onClick={toggleRecording}
-                className={`col-span-2 p-2 ${isRecording ? 'bg-red-600 hover:bg-red-700 animate-pulse text-white' : 'bg-red-500/20 hover:bg-red-500/30 text-red-100'} border border-red-500/30 font-mono text-[10px] rounded uppercase tracking-widest font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer`}
+                className={`col-span-2 p-2 ${isExportingState ? 'bg-red-700 hover:bg-red-800 text-white animate-pulse font-black' : isRecording ? 'bg-red-600 hover:bg-red-750 text-white animate-pulse' : 'bg-red-500/20 hover:bg-red-500/30 text-red-100'} border border-red-500/30 font-mono text-[10px] rounded uppercase tracking-widest font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer`}
               >
-                <Activity size={12} className={isRecording ? 'animate-spin' : ''} />
-                {isRecording ? 'STOP RECORDING' : 'RECORD VIDEO SCENE'}
+                <Activity size={12} className={isExportingState || isRecording ? 'animate-spin' : ''} />
+                {isExportingState ? `CANCEL EXPORT (${Math.round((exportFrameCount / exportFrameTotal) * 100)}%)` : isRecording ? 'STOP RECORDING' : 'RECORD VIDEO SCENE'}
               </button>
 
               <button

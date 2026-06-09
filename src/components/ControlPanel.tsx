@@ -25,7 +25,11 @@ import {
   Code,
   Check,
   RefreshCw,
-  Video
+  Video,
+  Bookmark,
+  Trash,
+  Plus,
+  BookOpen
 } from 'lucide-react';
 
 interface ControlPanelProps {
@@ -57,6 +61,391 @@ export default function ControlPanel({
 }: ControlPanelProps) {
   // Sidebar tab state matching twenty.com UI
   const [activeTab, setActiveTab] = useState<'design' | 'animations' | 'export'>('design');
+
+  const CURATED_PALETTES = [
+    {
+      name: "Cyberpunk Glow",
+      background: "#05050a",
+      material: "#ff007f",
+      dashColor: "#00f2fe",
+      hoverDashColor: "#ffffff",
+      stops: [
+        { offset: 0.0, color: "#090914" },
+        { offset: 0.5, color: "#ff007f" },
+        { offset: 1.0, color: "#00f2fe" }
+      ]
+    },
+    {
+      name: "Sunset Flare",
+      background: "#180400",
+      material: "#ff5e62",
+      dashColor: "#ffbe3b",
+      hoverDashColor: "#ffffff",
+      stops: [
+        { offset: 0.0, color: "#250a00" },
+        { offset: 0.5, color: "#ff5e62" },
+        { offset: 1.0, color: "#ffbe3b" }
+      ]
+    },
+    {
+      name: "Acid Toxicity",
+      background: "#020902",
+      material: "#39ff14",
+      dashColor: "#05dfd7",
+      hoverDashColor: "#ffffff",
+      stops: [
+        { offset: 0.0, color: "#011702" },
+        { offset: 0.5, color: "#39ff14" },
+        { offset: 1.0, color: "#05dfd7" }
+      ]
+    },
+    {
+      name: "Northern Aura",
+      background: "#010815",
+      material: "#1bb99b",
+      dashColor: "#0575e6",
+      hoverDashColor: "#00f260",
+      stops: [
+        { offset: 0.0, color: "#001026" },
+        { offset: 0.5, color: "#0575e6" },
+        { offset: 1.0, color: "#00f260" }
+      ]
+    },
+    {
+      name: "Dreamy Lavender",
+      background: "#0d0615",
+      material: "#a18cd1",
+      dashColor: "#fbc2eb",
+      hoverDashColor: "#fad0c4",
+      stops: [
+        { offset: 0.0, color: "#140b24" },
+        { offset: 0.5, color: "#a18cd1" },
+        { offset: 1.0, color: "#fbc2eb" }
+      ]
+    },
+    {
+      name: "Brutalist Chrome",
+      background: "#080808",
+      material: "#cbd5e1",
+      dashColor: "#1e293b",
+      hoverDashColor: "#f1f5f9",
+      stops: [
+        { offset: 0.0, color: "#020202" },
+        { offset: 0.5, color: "#475569" },
+        { offset: 1.0, color: "#cbd5e1" }
+      ]
+    },
+    {
+      name: "Oceanic Abyss",
+      background: "#020b14",
+      material: "#009ffd",
+      dashColor: "#2a2a72",
+      hoverDashColor: "#00ffd0",
+      stops: [
+        { offset: 0.0, color: "#000810" },
+        { offset: 0.5, color: "#2a2a72" },
+        { offset: 1.0, color: "#009ffd" }
+      ]
+    },
+    {
+      name: "Tangerine Dream",
+      background: "#160500",
+      material: "#ff4e00",
+      dashColor: "#ec9f05",
+      hoverDashColor: "#f9d423",
+      stops: [
+        { offset: 0.0, color: "#1a0600" },
+        { offset: 0.5, color: "#ff4e00" },
+        { offset: 1.0, color: "#ec9f05" }
+      ]
+    }
+  ];
+
+  const [paletteToast, setPaletteToast] = useState<string | null>(null);
+
+  const generateRandomPalette = () => {
+    const randomIndex = Math.floor(Math.random() * CURATED_PALETTES.length);
+    const selected = CURATED_PALETTES[randomIndex];
+    
+    onChange((prev) => ({
+      ...prev,
+      background: {
+        ...prev.background,
+        color: selected.background,
+        transparent: false,
+      },
+      material: {
+        ...prev.material,
+        color: selected.material,
+      },
+      halftone: {
+        ...prev.halftone,
+        dashColor: selected.dashColor,
+        hoverDashColor: selected.hoverDashColor,
+      },
+      gradient: {
+        ...prev.gradient,
+        stops: selected.stops,
+      }
+    }));
+
+    setPaletteToast(`Applied "${selected.name}" palette parameters!`);
+    setTimeout(() => setPaletteToast(null), 3000);
+  };
+
+  // --- LOCAL RANGE CATALOG PRESETS ENGINE ---
+  const [customPresets, setCustomPresets] = useState<{ name: string; settings: AppSettings; date: string }[]>(() => {
+    try {
+      const saved = localStorage.getItem('cognistudio_custom_presets');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [newPresetName, setNewPresetName] = useState('');
+  const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  const saveCurrentPreset = () => {
+    const name = newPresetName.trim();
+    if (!name) return;
+    const newPreset = {
+      name,
+      settings: JSON.parse(JSON.stringify(settings)),
+      date: new Date().toLocaleDateString()
+    };
+    const updated = [...customPresets, newPreset];
+    setCustomPresets(updated);
+    try {
+      localStorage.setItem('cognistudio_custom_presets', JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
+    setNewPresetName('');
+    setSaveToast('Successful: Preset saved in offline shelf!');
+    setTimeout(() => setSaveToast(null), 3000);
+  };
+
+  const loadPreset = (presetSettings: AppSettings) => {
+    onChange(() => JSON.parse(JSON.stringify(presetSettings)));
+    setSaveToast('Successful: Applied preset parameters!');
+    setTimeout(() => setSaveToast(null), 3000);
+  };
+
+  const deletePreset = (idx: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = customPresets.filter((_, i) => i !== idx);
+    setCustomPresets(updated);
+    try {
+      localStorage.setItem('cognistudio_custom_presets', JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
+    setSaveToast('Successful: Removed custom preset.');
+    setTimeout(() => setSaveToast(null), 2500);
+  };
+
+  const exportPresetsJSON = () => {
+    try {
+      const payload = JSON.stringify({
+        source: 'CogniStudio Presets Catalog',
+        version: '1.0',
+        presets: customPresets
+      }, null, 2);
+      const blob = new Blob([payload], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `cognistudio-custom-presets-${Date.now()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.warn(err);
+    }
+  };
+
+  const importPresetsJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data && Array.isArray(data.presets)) {
+          const loaded = data.presets.map((item: any) => ({
+            name: String(item.name || 'Imported Config'),
+            settings: item.settings,
+            date: String(item.date || new Date().toLocaleDateString())
+          }));
+          const updated = [...customPresets, ...loaded];
+          setCustomPresets(updated);
+          localStorage.setItem('cognistudio_custom_presets', JSON.stringify(updated));
+          setSaveToast(`Successfully imported ${loaded.length} custom presets!`);
+          setTimeout(() => setSaveToast(null), 3500);
+        } else {
+          setSaveToast('Error: Invalid JSON preset file.');
+          setTimeout(() => setSaveToast(null), 3000);
+        }
+      } catch {
+        setSaveToast('Error parsing preset backup data.');
+        setTimeout(() => setSaveToast(null), 3000);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const BUILTIN_PRESETS = [
+    {
+      name: "⚡ Neon Cyan Torus Grid",
+      description: "Luminescent cyan halftone crosshatch projecting over a twisting torus knot with active auto-rotation.",
+      settings: {
+        ...INITIAL_SETTINGS,
+        sourceMode: 'shape',
+        shapeKey: 'torusKnot',
+        shapeModifiers: { ...INITIAL_SETTINGS.shapeModifiers, twistAmount: 1.5, inflateAmount: 0.2 },
+        halftone: {
+          ...INITIAL_SETTINGS.halftone,
+          enabled: true,
+          shape: 'dots',
+          scale: 40,
+          power: -0.2,
+          dashColor: '#00f2fe',
+        },
+        animation: { ...INITIAL_SETTINGS.animation, autoRotateEnabled: true, rotateSpeed: 0.5 }
+      }
+    },
+    {
+      name: "🔮 Glass Prism Cylinder",
+      description: "Smooth refractive glass cylinder, high material environmental power, thin geometric concentric lines.",
+      settings: {
+        ...INITIAL_SETTINGS,
+        sourceMode: 'shape',
+        shapeKey: 'cylinder',
+        material: {
+          ...INITIAL_SETTINGS.material,
+          surface: 'glass',
+          thickness: 200,
+          refraction: 2.5,
+          color: '#ffffff',
+          environmentPower: 8,
+        },
+        halftone: {
+          ...INITIAL_SETTINGS.halftone,
+          enabled: true,
+          shape: 'lines',
+          scale: 22,
+          power: 0.1,
+          dashColor: '#ec008c'
+        },
+        animation: { ...INITIAL_SETTINGS.animation, autoRotateEnabled: true, rotateSpeed: 0.2 }
+      }
+    },
+    {
+      name: "🌇 Cyber Pink Text Frame",
+      description: "Glowing stylized block text rendered with retro crosshatch dots, warm lights and neon gold lines.",
+      settings: {
+        ...INITIAL_SETTINGS,
+        sourceMode: 'text',
+        textString: 'COGNITIVE',
+        fontFamily: 'Inter',
+        fontSize: 55,
+        halftone: {
+          ...INITIAL_SETTINGS.halftone,
+          enabled: true,
+          shape: 'lines',
+          scale: 35,
+          power: -0.05,
+          dashColor: '#ff007f'
+        },
+        material: {
+          ...INITIAL_SETTINGS.material,
+          color: '#f857a6'
+        },
+        animation: { ...INITIAL_SETTINGS.animation, floatEnabled: true, floatAmplitude: 0.25 }
+      }
+    },
+    {
+      name: "⚙️ Brutalist Steel Sphere",
+      description: "Specular high metalness industrial sphere with clean dense squares overlay and intense directional shading.",
+      settings: {
+        ...INITIAL_SETTINGS,
+        sourceMode: 'shape',
+        shapeKey: 'sphere',
+        material: {
+          ...INITIAL_SETTINGS.material,
+          surface: 'solid',
+          metalness: 0.95,
+          roughness: 0.05,
+          color: '#e2e8f0',
+        },
+        halftone: {
+          ...INITIAL_SETTINGS.halftone,
+          enabled: true,
+          shape: 'squares',
+          scale: 45,
+          power: -0.15,
+          dashColor: '#1a1b1f'
+        },
+        lighting: {
+          ...INITIAL_SETTINGS.lighting,
+          intensity: 0.8,
+          ambientIntensity: 0.2
+        }
+      }
+    },
+    {
+      name: "🌸 Sunset Plasma Wave",
+      description: "Vibrant flowing linear gradient backdrop, paired with a floating sphere under high-frequency depth ripples.",
+      settings: {
+        ...INITIAL_SETTINGS,
+        sourceMode: 'shape',
+        shapeKey: 'sphere',
+        gradient: {
+          ...INITIAL_SETTINGS.gradient,
+          enabled: true,
+          stops: [
+            { offset: 0, color: '#f35588' },
+            { offset: 0.5, color: '#9004cb' },
+            { offset: 1, color: '#ffb400' }
+          ],
+          speed: 0.3,
+          tilt: -12
+        },
+        halftone: {
+          ...INITIAL_SETTINGS.halftone,
+          enabled: true,
+          shape: 'dots',
+          scale: 28,
+          power: -0.12,
+          dashColor: '#f7009e'
+        }
+      }
+    },
+    {
+      name: "🧪 Wireframe Neural Edge",
+      description: "Twisted icosahedron biological structure mapped onto a holographic wireframe vector screen.",
+      settings: {
+        ...INITIAL_SETTINGS,
+        sourceMode: 'shape',
+        shapeKey: 'icosahedron',
+        material: {
+          ...INITIAL_SETTINGS.material,
+          surface: 'wireframe',
+          color: '#4bf4c4',
+        },
+        halftone: {
+          ...INITIAL_SETTINGS.halftone,
+          enabled: false,
+        },
+        animation: {
+          ...INITIAL_SETTINGS.animation,
+          autoRotateEnabled: true,
+          lightSweepEnabled: true,
+          lightSweepSpeed: 1.2
+        }
+      }
+    }
+  ];
 
   const [codeTab, setCodeTab] = useState<'react' | 'html'>('react');
   const [copiedCode, setCopiedCode] = useState(false);
@@ -1646,12 +2035,12 @@ export default function StandaloneHalftoneViewer() {
                     onClick={rotateSuggestions}
                     disabled={isSuggestionsLoading}
                     className="w-full py-2 px-3 bg-indigo-950/40 hover:bg-indigo-900/40 active:scale-98 border border-indigo-800/30 text-indigo-200 rounded-lg font-sans text-[11px] font-semibold tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:border-indigo-600/40"
-                    title="ক্লিক করে ৫টি সম্পূর্ণ নতুন জেনারেটিভ আইডিয়া তৈরি করুন"
+                    title="Click to generate 5 completely new generative ideas with AI"
                   >
                     {isSuggestionsLoading ? (
                       <>
                         <RefreshCw size={11} className="animate-spin text-indigo-400" />
-                        <span>আইডিয়া তৈরি হচ্ছে... (Fetching from Gemini)</span>
+                        <span>Generating suggestions... (Fetching from Gemini)</span>
                       </>
                     ) : (
                       <>
@@ -1815,6 +2204,98 @@ export default function StandaloneHalftoneViewer() {
                   >
                     Export Current Config as Base64 Code
                   </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 0.5: ONE-CLICK PALETTE GENERATION */}
+          <div className="border-b border-zinc-900 bg-amber-950/5" id="sect-palette-generator">
+            <button
+              onClick={() => toggleSection('palette-generator')}
+              className="w-full px-5 py-4 flex items-center justify-between hover:bg-zinc-950/40 transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <Paintbrush size={13} className="text-amber-500 animate-pulse" />
+                <span className="text-[10px] font-bold tracking-widest font-mono text-zinc-300 uppercase">0.5 ONE-CLICK PALETTES</span>
+              </div>
+              {openSection === 'palette-generator' ? <ChevronUp size={11} className="text-zinc-500" /> : <ChevronDown size={11} className="text-zinc-500" />}
+            </button>
+
+            {openSection === 'palette-generator' && (
+              <div className="px-5 pb-5 pt-1 flex flex-col gap-4">
+                <p className="text-[11px] text-zinc-500 leading-relaxed font-sans">
+                  Instantly synchronize background, material reflections, and gradient stops with real-time cohesive palettes.
+                </p>
+
+                {paletteToast && (
+                  <div className="bg-amber-950/20 border border-amber-500/20 text-amber-400 text-[10.5px] px-3.5 py-2.5 rounded-lg font-mono flex items-center gap-2 animate-pulse">
+                    <Check size={12} className="text-amber-400" />
+                    <span>{paletteToast}</span>
+                  </div>
+                )}
+
+                {/* Main Instant Generator Action button */}
+                <button
+                  onClick={generateRandomPalette}
+                  className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono font-bold text-xs uppercase rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                >
+                  <RefreshCw size={13} className="animate-spin-slow text-zinc-950" />
+                  Apply Random Palette Harmony
+                </button>
+
+                {/* Quick grid choices */}
+                <div className="flex flex-col gap-2 mt-1">
+                  <span className="text-[9px] font-bold font-mono text-zinc-550 tracking-wider">CURATED DESIGN SCHEMES</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {CURATED_PALETTES.map((p, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          onChange((prev) => ({
+                            ...prev,
+                            background: {
+                              ...prev.background,
+                              color: p.background,
+                              transparent: false,
+                            },
+                            material: {
+                              ...prev.material,
+                              color: p.material,
+                            },
+                            halftone: {
+                              ...prev.halftone,
+                              dashColor: p.dashColor,
+                              hoverDashColor: p.hoverDashColor,
+                            },
+                            gradient: {
+                              ...prev.gradient,
+                              stops: p.stops,
+                            }
+                          }));
+                          setPaletteToast(`Applied "${p.name}" theme!`);
+                          setTimeout(() => setPaletteToast(null), 3000);
+                        }}
+                        className="group bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-805 p-2 rounded-lg transition-all flex flex-col items-start gap-1.5 cursor-pointer"
+                      >
+                        <span className="text-[9.5px] font-bold text-zinc-300 group-hover:text-amber-400 transition-colors font-sans truncate w-full text-left">
+                          {p.name}
+                        </span>
+                        
+                        {/* Dot strip colors */}
+                        <div className="flex items-center gap-1">
+                          <span className="w-2.5 h-2.5 rounded-full border border-black/50" style={{ backgroundColor: p.background }} title="Background" />
+                          <span className="w-2.5 h-2.5 rounded-full border border-black/50" style={{ backgroundColor: p.material }} title="Material" />
+                          <span className="w-2.5 h-2.5 rounded-full border border-black/50" style={{ backgroundColor: p.dashColor }} title="Halftone Dot" />
+                          <div className="flex -space-x-1.5 pl-1">
+                            {p.stops.slice(0, 3).map((st, sidx) => (
+                              <span key={sidx} className="w-2 to-2 rounded-full border border-black/50" style={{ backgroundColor: st.color, width: '10px', height: '10px' }} />
+                            ))}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -3817,6 +4298,8 @@ export default function StandaloneHalftoneViewer() {
 
         </div>
       )}
+
+
 
     </div>
   );

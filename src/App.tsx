@@ -166,6 +166,8 @@ export default function App() {
     }
   }, []);
 
+  // Keyboard shortcuts and listeners have been disabled per design requests
+
   const showToast = (message: string) => {
     setToastMessage(message);
     setTimeout(() => {
@@ -340,16 +342,18 @@ export default function App() {
                 </span>
               </div>
               
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-white/20">•</span>
-                <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">DENSITY:</span>
-                <span className="text-indigo-400 font-bold">{settings.halftone.scale}</span>
-                <span className="text-xs text-white/20">•</span>
-                <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">FUZZ:</span>
-                <span className="text-indigo-400 font-bold">{settings.halftone.power}</span>
-                <span className="text-xs text-white/20">•</span>
-                <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">COMPRESSION:</span>
-                <span className="text-indigo-400 font-bold">{settings.halftone.width}</span>
+              <div className="flex items-center gap-4 flex-wrap w-full sm:w-auto sm:justify-end">
+                <div className="flex items-center gap-1.5 font-mono">
+                  <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">DENSITY:</span>
+                  <span className="text-indigo-400 font-bold">{settings.halftone.scale}</span>
+                  <span className="text-xs text-white/20">•</span>
+                  <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">FUZZ:</span>
+                  <span className="text-indigo-400 font-bold">{settings.halftone.power}</span>
+                  <span className="text-xs text-white/20">•</span>
+                  <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">COMPRESSION:</span>
+                  <span className="text-indigo-400 font-bold">{settings.halftone.width}</span>
+                </div>
+                
               </div>
             </div>
           </main>
@@ -375,6 +379,7 @@ export default function App() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
