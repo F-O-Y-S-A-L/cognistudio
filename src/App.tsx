@@ -154,19 +154,79 @@ export default function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedBlobsRef = useRef<Blob[]>([]);
 
-  // Parse location hash on mount to restore user designs
-  useEffect(() => {
+  // Parse location hash dynamically to update page state and load settings
+  const parseHash = () => {
     const hash = window.location.hash;
-    if (hash) {
-      const decoded = decodeSettingsFromBase64(hash);
-      if (decoded) {
-        setSettings((prev) => mergeSettings(prev, decoded));
-        showToast('Success: Loaded configuration from URL hash preset!');
-      }
+    if (!hash) return { page: 'main' as const, base64: null };
+
+    // Clear the leading '#' and any leading '/' for unified routing (e.g., #/silk or #silk)
+    const cleanHash = hash.replace(/^#\/?/, '');
+    if (!cleanHash) return { page: 'main' as const, base64: null };
+
+    let pagePart = cleanHash;
+    let base64Part: string | null = null;
+
+    if (cleanHash.includes('?c=')) {
+      const parts = cleanHash.split('?c=');
+      pagePart = parts[0];
+      base64Part = parts[1];
+    } else if (cleanHash.includes('/')) {
+      const parts = cleanHash.split('/');
+      pagePart = parts[0];
+      base64Part = parts[1];
+    } else if (cleanHash.length > 50) {
+      // Legacy compatibility: direct base64 configuration as the hash
+      pagePart = 'main';
+      base64Part = cleanHash;
     }
+
+    // Map URL endpoints with local pages
+    let page: 'main' | 'gradient' | 'ribbons' | 'silk' | 'cell' = 'main';
+    if (pagePart === 'mosaic' || pagePart === 'gradient') {
+      page = 'gradient';
+    } else if (pagePart === 'network' || pagePart === 'ribbons') {
+      page = 'ribbons';
+    } else if (pagePart === 'silk') {
+      page = 'silk';
+    } else if (pagePart === 'cell') {
+      page = 'cell';
+    }
+
+    return { page, base64: base64Part };
+  };
+
+  // Synchronize on mount and browser navigation history keys (back/forward)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const { page, base64 } = parseHash();
+      setActivePage(page);
+      if (base64) {
+        const decoded = decodeSettingsFromBase64(base64);
+        if (decoded) {
+          setSettings((prev) => mergeSettings(prev, decoded));
+        }
+      }
+    };
+
+    // Initialize on first load
+    handleHashChange();
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Keyboard shortcuts and listeners have been disabled per design requests
+  // Update URL Hash and load the selected page
+  const handlePageChange = (newPage: 'main' | 'gradient' | 'ribbons' | 'silk' | 'cell') => {
+    let routeName = 'source';
+    if (newPage === 'gradient') routeName = 'mosaic';
+    else if (newPage === 'ribbons') routeName = 'network';
+    else if (newPage === 'silk') routeName = 'silk';
+    else if (newPage === 'cell') routeName = 'cell';
+
+    // Set the hash without triggering an infinite handleHashChange loop reload
+    window.location.hash = `${routeName}`;
+    setActivePage(newPage);
+  };
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -180,7 +240,17 @@ export default function App() {
     const base64Str = encodeSettingsToBase64(settings);
     const origin = window.location.origin;
     const pathname = window.location.pathname;
-    const shareUrl = base64Str ? `${origin}${pathname}#${base64Str}` : window.location.href;
+
+    let routeName = 'source';
+    if (activePage === 'gradient') routeName = 'mosaic';
+    else if (activePage === 'ribbons') routeName = 'network';
+    else if (activePage === 'silk') routeName = 'silk';
+    else if (activePage === 'cell') routeName = 'cell';
+
+    const shareUrl = base64Str 
+      ? `${origin}${pathname}#/${routeName}?c=${base64Str}` 
+      : `${origin}${pathname}#/${routeName}`;
+
     navigator.clipboard.writeText(shareUrl);
     showToast('Success: Live share link copied!');
   };
@@ -296,7 +366,7 @@ export default function App() {
         settings={settings}
         onChange={setSettings}
         activePage={activePage}
-        setActivePage={setActivePage}
+        setActivePage={handlePageChange}
       />
 
       {/* Main Grid: Canvas + Sidebar or Ribbon Studio */}

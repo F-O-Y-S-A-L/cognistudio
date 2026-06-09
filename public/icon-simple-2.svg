@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Simple Icon 2: Clean Elegant Geometric Delta Triangle (জ্যামিতিক ডেল্টা ট্রায়াঙ্গেল) -->
+  <defs>
+    <linearGradient id="deltaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F43F5E" /> <!-- Coral Rose -->
+      <stop offset="100%" stop-color="#FB7185" /> <!-- Soft Rose -->
+    </linearGradient>
+    <linearGradient id="deltaGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1" /> <!-- Indigo -->
+      <stop offset="100%" stop-color="#8B5CF6" /> <!-- Violet -->
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="130" fill="#09090B" stroke="#27272A" stroke-width="4" />
+  <g transform="translate(256, 266)">
+    <!-- Interlocking Neon Triangles -->
+    <polygon points="-120,80 0,-130 120,80" fill="none" stroke="url(#deltaGrad)" stroke-width="28" stroke-linejoin="round" />
+    <polygon points="-80,50 0,-90 80,50" fill="none" stroke="url(#deltaGrad2)" stroke-width="16" stroke-linejoin="round" opacity="0.8" />
+  </g>
+</svg>

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Unique Icon 5: Futuristic Glowing Constellation / Polyhedron Art Crystal (ফিউচারিস্টিক জেনারেটিভ ক্রিস্টাল) -->
+  <defs>
+    <filter id="prismGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="15" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <linearGradient id="cyanBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" stroke-opacity="1" />
+      <stop offset="100%" stop-color="#0072FF" stroke-opacity="1" />
+    </linearGradient>
+    <linearGradient id="purplePink" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#EE0979" />
+      <stop offset="100%" stop-color="#FF6A00" />
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="140" fill="#05050A" stroke="#1B1B25" stroke-width="4" />
+  
+  <g filter="url(#prismGlow)">
+    <!-- 3D Polyhedron Geodesic wireframe structure representing interactive mathematics & creative code visualization -->
+    <!-- Nodes defined at primary 3D points -->
+    <!-- Facets shapes -->
+    <polygon points="256,90 380,180 256,256" fill="url(#cyanBlue)" opacity="0.4" />
+    <polygon points="256,90 132,180 256,256" fill="url(#cyanBlue)" opacity="0.3" />
+    <polygon points="132,180 256,256 160,360" fill="url(#purplePink)" opacity="0.35" />
+    <polygon points="380,180 256,256 352,360" fill="url(#purplePink)" opacity="0.45" />
+    <polygon points="256,256 160,360 256,422" fill="url(#cyanBlue)" opacity="0.25" />
+    <polygon points="256,256 352,360 256,422" fill="url(#cyanBlue)" opacity="0.35" />
+
+    <!-- Sharp Glowing Edge Wireframe Lines -->
+    <line x1="256" y1="90" x2="380" y2="180" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" />
+    <line x1="380" y1="180" x2="352" y2="360" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" />
+    <line x1="352" y1="360" x2="256" y2="422" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" />
+    <line x1="256" y1="422" x2="160" y2="360" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" />
+    <line x1="160" y1="360" x2="132" y2="180" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" />
+    <line x1="132" y1="180" x2="256" y2="90" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" />
+    
+    <!-- Inner Connections -->
+    <line x1="256" y1="90" x2="256" y2="256" stroke="#FFFFFF" stroke-width="4" />
+    <line x1="380" y1="180" x2="256" y2="256" stroke="#FFFFFF" stroke-width="4" />
+    <line x1="352" y1="360" x2="256" y2="256" stroke="#FFFFFF" stroke-width="4" />
+    <line x1="256" y1="422" x2="256" y2="256" stroke="#FFFFFF" stroke-width="4" />
+    <line x1="160" y1="360" x2="256" y2="256" stroke="#FFFFFF" stroke-width="4" />
+    <line x1="132" y1="180" x2="256" y2="256" stroke="#FFFFFF" stroke-width="4" />
+
+    <!-- Bright Sparkling Core Vertices -->
+    <circle cx="256" cy="90" r="10" fill="#FF6A00" />
+    <circle cx="380" cy="180" r="10" fill="#EE0979" />
+    <circle cx="352" cy="360" r="10" fill="#00F0FF" />
+    <circle cx="256" cy="422" r="10" fill="#0072FF" />
+    <circle cx="160" cy="360" r="10" fill="#FF6A00" />
+    <circle cx="132" cy="180" r="10" fill="#EE0979" />
+    <circle cx="256" cy="256" r="14" fill="#FFFFFF" />
+  </g>
+</svg>

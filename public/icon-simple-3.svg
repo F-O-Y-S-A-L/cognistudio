@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Simple Icon 3: Neon Dot Matrix Grid (নিয়ন ডট ম্যাট্রিক্স গ্রিড) -->
+  <rect x="16" y="16" width="480" height="480" rx="130" fill="#09090B" stroke="#27272A" stroke-width="4" />
+  <g transform="translate(106, 106)" fill="#10B981"> <!-- Emerald Green -->
+    <!-- 5x5 Matrix Grid with scaled center displaying an explosion/art pattern -->
+    <circle cx="60" cy="60" r="14" opacity="0.4" />
+    <circle cx="120" cy="60" r="14" opacity="0.5" />
+    <circle cx="180" cy="60" r="14" opacity="0.6" />
+    <circle cx="240" cy="60" r="14" opacity="0.5" />
+    <circle cx="300" cy="60" r="14" opacity="0.4" />
+
+    <circle cx="60" cy="120" r="14" opacity="0.5" />
+    <circle cx="120" cy="120" r="18" fill="#34D399" />
+    <circle cx="180" cy="120" r="22" fill="#34D399" />
+    <circle cx="240" cy="120" r="18" fill="#34D399" />
+    <circle cx="300" cy="120" r="14" opacity="0.5" />
+
+    <circle cx="60" cy="180" r="14" opacity="0.6" />
+    <circle cx="120" cy="180" r="22" fill="#34D399" />
+    <circle cx="180" cy="180" r="32" fill="#059669" /> <!-- Strong Highlight Core -->
+    <circle cx="240" cy="180" r="22" fill="#34D399" />
+    <circle cx="300" cy="180" r="14" opacity="0.6" />
+
+    <circle cx="60" cy="240" r="14" opacity="0.5" />
+    <circle cx="120" cy="240" r="18" fill="#34D399" />
+    <circle cx="180" cy="240" r="22" fill="#34D399" />
+    <circle cx="240" cy="240" r="18" fill="#34D399" />
+    <circle cx="300" cy="240" r="14" opacity="0.5" />
+
+    <circle cx="60" cy="300" r="14" opacity="0.4" />
+    <circle cx="120" cy="300" r="14" opacity="0.5" />
+    <circle cx="180" cy="300" r="14" opacity="0.6" />
+    <circle cx="240" cy="300" r="14" opacity="0.5" />
+    <circle cx="300" cy="300" r="14" opacity="0.4" />
+  </g>
+</svg>

@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Glow Filter -->
+    <filter id="glow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="14" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    
+    <!-- Gradients -->
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1" /> <!-- Indigo -->
+      <stop offset="50%" stop-color="#8B5CF6" /> <!-- Violet -->
+      <stop offset="100%" stop-color="#06B6D4" /> <!-- Cyan -->
+    </linearGradient>
+    
+    <linearGradient id="glowGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.8" /> <!-- Blue -->
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0.9" /> <!-- Emerald -->
+    </linearGradient>
+
+    <radialGradient id="bgRing" cx="50%" cy="50%" r="50%">
+      <stop offset="80%" stop-color="#121214" stop-opacity="0" />
+      <stop offset="100%" stop-color="#1E1E24" stop-opacity="0.5" />
+    </radialGradient>
+  </defs>
+
+  <!-- Outer ambient glowing ring -->
+  <circle cx="256" cy="256" r="220" fill="url(#bgRing)" stroke="url(#primaryGrad)" stroke-width="12" stroke-linecap="round" stroke-dasharray="15 30 100 30" opacity="0.85" />
+
+  <!-- Smooth 3D Silk Waves (Stylized Intersecting Bezier Paths) -->
+  <g filter="url(#glow)">
+    <!-- Silk Wave 1 -->
+    <path d="M 140,256 C 200,120 312,120 372,256" fill="none" stroke="url(#primaryGrad)" stroke-width="20" stroke-linecap="round" opacity="0.9" />
+    <!-- Silk Wave 2 -->
+    <path d="M 140,256 C 200,392 312,392 372,256" fill="none" stroke="url(#primaryGrad)" stroke-width="14" stroke-linecap="round" opacity="0.8" />
+    <!-- Center Wave Core (Cogni/Brain node core) -->
+    <path d="M 170,256 C 220,180 292,180 342,256" fill="none" stroke="url(#glowGrad)" stroke-width="16" stroke-linecap="round" opacity="0.95" />
+    <path d="M 170,256 C 220,332 292,332 342,256" fill="none" stroke="url(#glowGrad)" stroke-width="10" stroke-linecap="round" opacity="0.7" />
+  </g>
+
+  <!-- Neural Dot Grid Nodes (Particles / Mosaic dots) -->
+  <g>
+    <!-- Center core node -->
+    <circle cx="256" cy="256" r="22" fill="#FFFFFF" filter="url(#glow)" />
+    <circle cx="256" cy="256" r="14" fill="url(#primaryGrad)" />
+    
+    <!-- Outer orbiting/connected nodes -->
+    <circle cx="140" cy="256" r="14" fill="#06B6D4" filter="url(#glow)" />
+    <circle cx="372" cy="256" r="14" fill="#8B5CF6" filter="url(#glow)" />
+    
+    <circle cx="256" cy="144" r="12" fill="#4F46E5" filter="url(#glow)" />
+    <circle cx="256" cy="368" r="12" fill="#10B981" filter="url(#glow)" />
+
+    <!-- Tiny constellation dots -->
+    <circle cx="200" cy="190" r="6" fill="#FFFFFF" opacity="0.6" />
+    <circle cx="312" cy="322" r="6" fill="#FFFFFF" opacity="0.6" />
+    <circle cx="312" cy="190" r="6" fill="#4F46E5" opacity="0.7" />
+    <circle cx="200" cy="322" r="6" fill="#06B6D4" opacity="0.7" />
+  </g>
+</svg>

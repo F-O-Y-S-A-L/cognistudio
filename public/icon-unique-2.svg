@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Unique Icon 2: Cyber Vision Neon Vortex Portal Star (হাইপার গ্লোয়িং বাটারফ্লাই কর্টেক্স পোর্টাল) -->
+  <defs>
+    <filter id="vortexGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <linearGradient id="cyberPink" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF0055" /> 
+      <stop offset="100%" stop-color="#FFAA00" />
+    </linearGradient>
+    <linearGradient id="cyberPurple" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7000FF" /> 
+      <stop offset="100%" stop-color="#00FFFF" />
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="140" fill="#060608" stroke="#1F1F24" stroke-width="4" />
+  
+  <!-- Cyber Portal Star Vortex (Complex overlapping geometric stars) -->
+  <g filter="url(#vortexGlow)" stroke-linecap="round">
+    <!-- Star 1: Hot Sunset Gold -->
+    <path d="M 256,60 L 300,200 L 440,256 L 300,312 L 256,452 L 212,312 L 72,256 L 212,200 Z" 
+          fill="none" stroke="url(#cyberPink)" stroke-width="18" stroke-linejoin="round" />
+    
+    <!-- Star 2 (Rotated 45 deg): Holographic Blue Pink -->
+    <path d="M 256,120 L 285,220 L 380,256 L 285,292 L 256,392 L 227,292 L 132,256 L 227,220 Z" 
+          fill="none" stroke="url(#cyberPurple)" stroke-width="12" stroke-linejoin="round" transform="rotate(45, 256, 256)" />
+          
+    <!-- Super Bright Sci-fi Fusion Core -->
+    <circle cx="256" cy="256" r="32" fill="#FFFFFF" />
+    <circle cx="256" cy="256" r="20" fill="#FF0055" />
+    <circle cx="256" cy="256" r="8" fill="#FFFFFF" />
+  </g>
+</svg>

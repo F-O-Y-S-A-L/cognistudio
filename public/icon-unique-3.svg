@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Unique Icon 3: Bento Grid "Creative Cyber Eye" Visualizer (সৃজনশীল সাইবার আই ভিজ্যুয়ালাইজার) -->
+  <defs>
+    <linearGradient id="bentoCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" /> <!-- Emerland -->
+      <stop offset="100%" stop-color="#06B6D4" /> <!-- Cyan -->
+    </linearGradient>
+    <linearGradient id="bentoPink" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FF1493" /> 
+      <stop offset="100%" stop-color="#800080" />
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="140" fill="#080810" stroke="#1B1B25" stroke-width="4" />
+  
+  <g transform="translate(66, 66)">
+    <!-- Dynamic grid cells representing multiple canvas features -->
+    <!-- Cell 1 (Tall Left) -->
+    <rect x="20" y="20" width="100" height="220" rx="30" fill="url(#bentoPink)" opacity="0.85" />
+    <!-- Cell 2 (Center Square) with Eye center -->
+    <rect x="140" y="20" width="100" height="100" rx="30" fill="#1F1F2E" />
+    <circle cx="190" cy="70" r="28" fill="#00F0FF" />
+    <circle cx="190" cy="70" r="12" fill="#FFFFFF" />
+    
+    <!-- Cell 3 (Right Tall) -->
+    <rect x="260" y="20" width="100" height="220" rx="30" fill="url(#bentoCyan)" opacity="0.85" />
+    
+    <!-- Cell 4 (Bottom Left Small) -->
+    <rect x="20" y="260" width="100" height="100" rx="30" fill="#4F46E5" />
+    <circle cx="70" cy="310" r="14" fill="#FFFFFF" />
+
+    <!-- Cell 5 (Bottom Wide Central Matrix) -->
+    <rect x="140" y="140" width="100" height="220" rx="30" fill="#0D0D15" stroke="#4F46E5" stroke-width="6" />
+    <!-- Wave pattern inside center bento -->
+    <path d="M 160,250 Q 190,200 190,250 T 220,250" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" />
+    
+    <!-- Cell 6 (Bottom Right Small) -->
+    <rect x="260" y="260" width="100" height="100" rx="30" fill="#F59E0B" />
+    <polygon points="290,325 310,295 330,325" fill="#FFFFFF" />
+  </g>
+</svg>

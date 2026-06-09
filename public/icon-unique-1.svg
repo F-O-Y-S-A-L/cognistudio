@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Unique Icon 1: Tech Quantum Neural Brain Connection Network (কোয়ান্টাম নিউরাল ব্রেইন নেটওয়ার্ক) -->
+  <defs>
+    <filter id="ultraGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="15" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <linearGradient id="neonBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" /> <!-- Cyan -->
+      <stop offset="100%" stop-color="#7000FF" /> <!-- Intense Purple -->
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="130" fill="#070709" stroke="#1F1F24" stroke-width="4" />
+  
+  <!-- Interconnected circuitry lines in background -->
+  <g stroke="url(#neonBlue)" stroke-width="4" stroke-linecap="round" opacity="0.45" filter="url(#ultraGlow)">
+    <!-- Circuit connection paths mimicking neural nodes -->
+    <path d="M 120,256 L 200,180 L 312,180 L 392,256 L 312,332 L 200,332 Z" fill="none" />
+    <line x1="120" y1="256" x2="392" y2="256" />
+    <line x1="200" y1="180" x2="312" y2="332" />
+    <line x1="312" y1="180" x2="200" y2="332" />
+  </g>
+
+  <!-- Bright high-contrast nodes -->
+  <g filter="url(#ultraGlow)">
+    <circle cx="256" cy="256" r="30" fill="#00F0FF" />
+    <circle cx="256" cy="256" r="16" fill="#FFFFFF" />
+
+    <circle cx="120" cy="256" r="18" fill="#7000FF" />
+    <circle cx="392" cy="256" r="18" fill="#7000FF" />
+    
+    <circle cx="200" cy="180" r="15" fill="#3B82F6" />
+    <circle cx="312" cy="180" r="15" fill="#3B82F6" />
+    
+    <circle cx="200" cy="332" r="15" fill="#10B981" />
+    <circle cx="312" cy="332" r="15" fill="#10B981" />
+  </g>
+</svg>

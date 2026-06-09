@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Simple Icon 1: Minimal Glowing Sphere (শোভন গ্লোয়িং স্ফিয়ার) -->
+  <defs>
+    <radialGradient id="sphereGrad" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#38BDF8" /> <!-- Light Cyan -->
+      <stop offset="60%" stop-color="#4F46E5" /> <!-- Royal Indigo -->
+      <stop offset="100%" stop-color="#0F172A" /> <!-- Dark Slate -->
+    </radialGradient>
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="130" fill="#09090B" stroke="#27272A" stroke-width="4" />
+  <!-- Vibrant glowing aura behind -->
+  <circle cx="256" cy="256" r="140" fill="#38BDF8" opacity="0.15" filter="url(#softGlow)" />
+  <!-- Main Sphere -->
+  <circle cx="256" cy="256" r="120" fill="url(#sphereGrad)" filter="url(#softGlow)" />
+  <!-- Sparkle element -->
+  <circle cx="200" cy="200" r="16" fill="#FFFFFF" opacity="0.4" filter="url(#softGlow)" />
+</svg>
