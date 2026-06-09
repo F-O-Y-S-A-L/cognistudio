@@ -6,6 +6,159 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+// Dynamic, smart local fallback style preset generator in case Gemini is transiently overloaded or API key is not configured
+const generateFallbackPreset = (pr: string) => {
+  const normalized = pr.toLowerCase();
+  
+  let shapeKey = "torusKnot";
+  if (normalized.includes("sphere") || normalized.includes("ball") || normalized.includes("bubble") || normalized.includes("drop")) {
+    shapeKey = "sphere";
+  } else if (normalized.includes("torus") || normalized.includes("donut") || normalized.includes("ring")) {
+    shapeKey = "torus";
+  } else if (normalized.includes("box") || normalized.includes("cube") || normalized.includes("square")) {
+    shapeKey = "box";
+  } else if (normalized.includes("cone")) {
+    shapeKey = "cone";
+  } else if (normalized.includes("cylinder") || normalized.includes("tube") || normalized.includes("pipe")) {
+    shapeKey = "cylinder";
+  } else if (normalized.includes("octahedron")) {
+    shapeKey = "octahedron";
+  } else if (normalized.includes("dodecahedron")) {
+    shapeKey = "dodecahedron";
+  } else if (normalized.includes("tetrahedron")) {
+    shapeKey = "tetrahedron";
+  } else if (normalized.includes("icosahedron") || normalized.includes("star") || normalized.includes("crystal") || normalized.includes("prism")) {
+    shapeKey = "icosahedron";
+  } else if (normalized.includes("sun") || normalized.includes("solar") || normalized.includes("eclipse")) {
+    shapeKey = "sunCoin";
+  } else if (normalized.includes("lotus") || normalized.includes("flower") || normalized.includes("zen") || normalized.includes("garden")) {
+    shapeKey = "lotusCoin";
+  } else if (normalized.includes("arrow") || normalized.includes("target") || normalized.includes("bullseye")) {
+    shapeKey = "arrowTarget";
+  } else if (normalized.includes("dollar") || normalized.includes("coin") || normalized.includes("money") || normalized.includes("gold")) {
+    shapeKey = "dollarCoin";
+  }
+
+  let materialColor = "#22c55e"; 
+  let dashColor = "#2563eb"; 
+  let hoverDashColor = "#dc2626"; 
+  let bgColor = "#000000";
+  let transparent = true;
+  let surface = "solid";
+  let roughness = 0.4;
+  let metalness = 0.5;
+  let waveAmplitude = 0.0;
+  let waveFrequency = 2.5;
+
+  if (normalized.includes("neon") || normalized.includes("cyber") || normalized.includes("matrix")) {
+    materialColor = "#00ffcc";
+    dashColor = "#ff007f";
+    hoverDashColor = "#39ff14";
+    bgColor = "#030712";
+  } else if (normalized.includes("solar") || normalized.includes("sun") || normalized.includes("fire") || normalized.includes("gold") || normalized.includes("orange") || normalized.includes("fiery")) {
+    materialColor = "#f59e0b"; 
+    dashColor = "#dc2626"; 
+    hoverDashColor = "#fbbf24"; 
+    bgColor = "#080200";
+  } else if (normalized.includes("matrix") || normalized.includes("emerald") || normalized.includes("hacker") || normalized.includes("green")) {
+    materialColor = "#10b981"; 
+    dashColor = "#047857"; 
+    hoverDashColor = "#00ff00"; 
+    bgColor = "#020617";
+  } else if (normalized.includes("glass") || normalized.includes("refract") || normalized.includes("prism") || normalized.includes("crystal")) {
+    surface = "glass";
+    materialColor = "#38bdf8"; 
+    dashColor = "#4f46e5"; 
+    hoverDashColor = "#ec4899"; 
+    roughness = 0.1;
+    metalness = 0.9;
+  } else if (normalized.includes("water") || normalized.includes("droplet") || normalized.includes("liquid") || normalized.includes("sea") || normalized.includes("ocean") || normalized.includes("blue")) {
+    materialColor = "#06b6d4"; 
+    dashColor = "#2563eb"; 
+    hoverDashColor = "#00ffff"; 
+    waveAmplitude = 0.8;
+    waveFrequency = 3.0;
+  } else if (normalized.includes("zen") || normalized.includes("lotus") || normalized.includes("teal") || normalized.includes("soft")) {
+    materialColor = "#14b8a6"; 
+    dashColor = "#0d9488"; 
+    hoverDashColor = "#38bdf8"; 
+    bgColor = "#0a0a0a";
+  } else if (normalized.includes("retro") || normalized.includes("sunset") || normalized.includes("purple") || normalized.includes("pink") || normalized.includes("violet")) {
+    materialColor = "#d946ef"; 
+    dashColor = "#7c3aed"; 
+    hoverDashColor = "#f43f5e"; 
+    bgColor = "#0c0a0f";
+  } else if (normalized.includes("steel") || normalized.includes("brutalist") || normalized.includes("metal") || normalized.includes("silver") || normalized.includes("grey") || normalized.includes("gray")) {
+    materialColor = "#94a3b8"; 
+    dashColor = "#334155"; 
+    hoverDashColor = "#ffd700"; 
+    metalness = 0.8;
+    roughness = 0.2;
+    bgColor = "#090d16";
+  } else if (normalized.includes("vintage") || normalized.includes("news") || normalized.includes("monochrome") || normalized.includes("black") || normalized.includes("white")) {
+    materialColor = "#ffffff";
+    dashColor = "#000000";
+    hoverDashColor = "#525252";
+    bgColor = "#ffffff";
+    transparent = false;
+  }
+
+  if (normalized.includes("liquid") || normalized.includes("wave") || normalized.includes("sway") || normalized.includes("flow") || normalized.includes("active") || normalized.includes("fluid")) {
+    waveAmplitude = waveAmplitude || 0.6;
+    waveFrequency = waveFrequency || 3.0;
+  }
+
+  let patternShape = "dots";
+  if (normalized.includes("square") || normalized.includes("matrix") || normalized.includes("block")) {
+    patternShape = "squares";
+  } else if (normalized.includes("line") || normalized.includes("stripe")) {
+    patternShape = "lines";
+  } else if (normalized.includes("crosshatch") || normalized.includes("sketch") || normalized.includes("hatch")) {
+    patternShape = "crosshatch";
+  }
+
+  return {
+    sourceMode: normalized.includes("text") ? "text" : "shape",
+    shapeKey: shapeKey,
+    textString: normalized.includes("text") ? (pr.match(/[A-Za-z0-9]+/)?.[0]?.substring(0, 4).toUpperCase() || "AI") : "AI",
+    distance: 5.0,
+    lighting: {
+      intensity: surface === "glass" ? 1.8 : 1.2,
+      fillIntensity: 0.8,
+      ambientIntensity: 0.15,
+      angleDegrees: 135,
+      height: 5.0
+    },
+    material: {
+      surface: surface,
+      color: materialColor,
+      roughness: roughness,
+      metalness: metalness,
+      thickness: 150,
+      refraction: 1.5,
+      environmentPower: surface === "glass" ? 5.0 : 2.0
+    },
+    halftone: {
+      shape: patternShape,
+      scale: normalized.includes("high density") || normalized.includes("fine") ? 55.0 : 35.0,
+      power: 0.2,
+      toneTarget: normalized.includes("dark") ? "dark" : "light",
+      width: 0.5,
+      imageContrast: 1.2,
+      dashColor: dashColor,
+      hoverDashColor: hoverDashColor,
+      gridAngle: 45.0,
+      useImageColors: false,
+      waveAmplitude: waveAmplitude,
+      waveFrequency: waveFrequency
+    },
+    background: {
+      transparent: true,
+      color: bgColor
+    }
+  };
+};
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -15,11 +168,28 @@ async function startServer() {
   // API route for dynamic AI suggestions
   app.post("/api/gemini/suggest-concepts", async (req, res) => {
     try {
+      const fallbackPool = [
+        { name: "🎴 Solar Flare", prompt: "A warm blazing solar eclipse with fiery gold colors, thin concentric circles and smooth halo glow" },
+        { name: "💻 Neon Matrix", prompt: "Emerald retro digital hacker code matrix, high density square halftone in dark background" },
+        { name: "🔮 Glass Torus", prompt: "A beautiful glassy refraction torus with shiny metalness, light pastel blue colors and crosshatch dots" },
+        { name: "🪙 Cyber Coin", prompt: "A sleek silver sun coin with high-tech cyan vector dots, moody directional light and dark transparent glass" },
+        { name: "🪐 Cosmic Blast", prompt: "Cosmic stardust nebula icosahedron, cyan and magenta halftone dots, floating on transparent canvas" },
+        { name: "🌸 Zen Lotus", prompt: "Zen lotus coin with teal circles halftone, soft white matte material, clean ambient studio lights" },
+        { name: "🌇 Retro Sunset", prompt: "Cyberpunk highway neon sunset grid, violet cylinder, high metalness, bright pink glowing lines" },
+        { name: "💎 Crystal Prism", prompt: "Prismatic crystal pyramid, high environmental power, multi-colored dots overlap, black transparent space" },
+        { name: "⚙️ Brutalist Steel", prompt: "Brutalist bold steel box with heavy yellow crosshatch dots, high contrast edge light, dark shadow" },
+        { name: "💧 Water Droplet", prompt: "Glistening water droplet sphere, high thickness refraction, liquid pattern, neon green halftone accents" }
+      ];
+
+      const generateFallbackConcepts = () => {
+        const shuffled = [...fallbackPool].sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, 5);
+      };
+
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        return res.status(500).json({ 
-          error: "GEMINI_API_KEY environment variable is not configured." 
-        });
+        console.warn("[Gemini API] GEMINI_API_KEY environment variable is not configured. Falling back to local pool gracefully.");
+        return res.json({ concepts: generateFallbackConcepts() });
       }
 
       const ai = new GoogleGenAI({
@@ -60,24 +230,6 @@ Return a raw JSON object containing an array under the "concepts" key.`;
           },
           required: ["concepts"]
         }
-      };
-
-      const fallbackPool = [
-        { name: "🎴 Solar Flare", prompt: "A warm blazing solar eclipse with fiery gold colors, thin concentric circles and smooth halo glow" },
-        { name: "💻 Neon Matrix", prompt: "Emerald retro digital hacker code matrix, high density square halftone in dark background" },
-        { name: "🔮 Glass Torus", prompt: "A beautiful glassy refraction torus with shiny metalness, light pastel blue colors and crosshatch dots" },
-        { name: "🪙 Cyber Coin", prompt: "A sleek silver sun coin with high-tech cyan vector dots, moody directional light and dark transparent glass" },
-        { name: "🪐 Cosmic Blast", prompt: "Cosmic stardust nebula icosahedron, cyan and magenta halftone dots, floating on transparent canvas" },
-        { name: "🌸 Zen Lotus", prompt: "Zen lotus coin with teal circles halftone, soft white matte material, clean ambient studio lights" },
-        { name: "🌇 Retro Sunset", prompt: "Cyberpunk highway neon sunset grid, violet cylinder, high metalness, bright pink glowing lines" },
-        { name: "💎 Crystal Prism", prompt: "Prismatic crystal pyramid, high environmental power, multi-colored dots overlap, black transparent space" },
-        { name: "⚙️ Brutalist Steel", prompt: "Brutalist bold steel box with heavy yellow crosshatch dots, high contrast edge light, dark shadow" },
-        { name: "💧 Water Droplet", prompt: "Glistening water droplet sphere, high thickness refraction, liquid pattern, neon green halftone accents" }
-      ];
-
-      const generateFallbackConcepts = () => {
-        const shuffled = [...fallbackPool].sort(() => 0.5 - Math.random());
-        return shuffled.slice(0, 5);
       };
 
       const modelsToTry = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
@@ -139,9 +291,9 @@ Return a raw JSON object containing an array under the "concepts" key.`;
 
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        return res.status(500).json({ 
-          error: "GEMINI_API_KEY environment variable is not configured. Please add it in Settings > Secrets." 
-        });
+        console.warn("[Gemini API] GEMINI_API_KEY environment variable is not configured. Falling back to dynamic heuristic local generator.");
+        const designSettings = generateFallbackPreset(prompt);
+        return res.json({ settings: designSettings });
       }
 
       const ai = new GoogleGenAI({
@@ -227,159 +379,6 @@ Make sure values are highly artistic, vibrant, and coordinated:
         }
       };
 
-      // Dynamic, smart local fallback style preset generator in case Gemini is transiently overloaded (503 status)
-      const generateFallbackPreset = (pr: string) => {
-        const normalized = pr.toLowerCase();
-        
-        let shapeKey = "torusKnot";
-        if (normalized.includes("sphere") || normalized.includes("ball") || normalized.includes("bubble") || normalized.includes("drop")) {
-          shapeKey = "sphere";
-        } else if (normalized.includes("torus") || normalized.includes("donut") || normalized.includes("ring")) {
-          shapeKey = "torus";
-        } else if (normalized.includes("box") || normalized.includes("cube") || normalized.includes("square")) {
-          shapeKey = "box";
-        } else if (normalized.includes("cone")) {
-          shapeKey = "cone";
-        } else if (normalized.includes("cylinder") || normalized.includes("tube") || normalized.includes("pipe")) {
-          shapeKey = "cylinder";
-        } else if (normalized.includes("octahedron")) {
-          shapeKey = "octahedron";
-        } else if (normalized.includes("dodecahedron")) {
-          shapeKey = "dodecahedron";
-        } else if (normalized.includes("tetrahedron")) {
-          shapeKey = "tetrahedron";
-        } else if (normalized.includes("icosahedron") || normalized.includes("star") || normalized.includes("crystal") || normalized.includes("prism")) {
-          shapeKey = "icosahedron";
-        } else if (normalized.includes("sun") || normalized.includes("solar") || normalized.includes("eclipse")) {
-          shapeKey = "sunCoin";
-        } else if (normalized.includes("lotus") || normalized.includes("flower") || normalized.includes("zen") || normalized.includes("garden")) {
-          shapeKey = "lotusCoin";
-        } else if (normalized.includes("arrow") || normalized.includes("target") || normalized.includes("bullseye")) {
-          shapeKey = "arrowTarget";
-        } else if (normalized.includes("dollar") || normalized.includes("coin") || normalized.includes("money") || normalized.includes("gold")) {
-          shapeKey = "dollarCoin";
-        }
-
-        let materialColor = "#22c55e"; 
-        let dashColor = "#2563eb"; 
-        let hoverDashColor = "#dc2626"; 
-        let bgColor = "#000000";
-        let transparent = true;
-        let surface = "solid";
-        let roughness = 0.4;
-        let metalness = 0.5;
-        let waveAmplitude = 0.0;
-        let waveFrequency = 2.5;
-
-        if (normalized.includes("neon") || normalized.includes("cyber") || normalized.includes("matrix")) {
-          materialColor = "#00ffcc";
-          dashColor = "#ff007f";
-          hoverDashColor = "#39ff14";
-          bgColor = "#030712";
-        } else if (normalized.includes("solar") || normalized.includes("sun") || normalized.includes("fire") || normalized.includes("gold") || normalized.includes("orange") || normalized.includes("fiery")) {
-          materialColor = "#f59e0b"; 
-          dashColor = "#dc2626"; 
-          hoverDashColor = "#fbbf24"; 
-          bgColor = "#080200";
-        } else if (normalized.includes("matrix") || normalized.includes("emerald") || normalized.includes("hacker") || normalized.includes("green")) {
-          materialColor = "#10b981"; 
-          dashColor = "#047857"; 
-          hoverDashColor = "#00ff00"; 
-          bgColor = "#020617";
-        } else if (normalized.includes("glass") || normalized.includes("refract") || normalized.includes("prism") || normalized.includes("crystal")) {
-          surface = "glass";
-          materialColor = "#38bdf8"; 
-          dashColor = "#4f46e5"; 
-          hoverDashColor = "#ec4899"; 
-          roughness = 0.1;
-          metalness = 0.9;
-        } else if (normalized.includes("water") || normalized.includes("droplet") || normalized.includes("liquid") || normalized.includes("sea") || normalized.includes("ocean") || normalized.includes("blue")) {
-          materialColor = "#06b6d4"; 
-          dashColor = "#2563eb"; 
-          hoverDashColor = "#00ffff"; 
-          waveAmplitude = 0.8;
-          waveFrequency = 3.0;
-        } else if (normalized.includes("zen") || normalized.includes("lotus") || normalized.includes("teal") || normalized.includes("soft")) {
-          materialColor = "#14b8a6"; 
-          dashColor = "#0d9488"; 
-          hoverDashColor = "#38bdf8"; 
-          bgColor = "#0a0a0a";
-        } else if (normalized.includes("retro") || normalized.includes("sunset") || normalized.includes("purple") || normalized.includes("pink") || normalized.includes("violet")) {
-          materialColor = "#d946ef"; 
-          dashColor = "#7c3aed"; 
-          hoverDashColor = "#f43f5e"; 
-          bgColor = "#0c0a0f";
-        } else if (normalized.includes("steel") || normalized.includes("brutalist") || normalized.includes("metal") || normalized.includes("silver") || normalized.includes("grey") || normalized.includes("gray")) {
-          materialColor = "#94a3b8"; 
-          dashColor = "#334155"; 
-          hoverDashColor = "#ffd700"; 
-          metalness = 0.8;
-          roughness = 0.2;
-          bgColor = "#090d16";
-        } else if (normalized.includes("vintage") || normalized.includes("news") || normalized.includes("monochrome") || normalized.includes("black") || normalized.includes("white")) {
-          materialColor = "#ffffff";
-          dashColor = "#000000";
-          hoverDashColor = "#525252";
-          bgColor = "#ffffff";
-          transparent = false;
-        }
-
-        if (normalized.includes("liquid") || normalized.includes("wave") || normalized.includes("sway") || normalized.includes("flow") || normalized.includes("active") || normalized.includes("fluid")) {
-          waveAmplitude = waveAmplitude || 0.6;
-          waveFrequency = waveFrequency || 3.0;
-        }
-
-        let patternShape = "dots";
-        if (normalized.includes("square") || normalized.includes("matrix") || normalized.includes("block")) {
-          patternShape = "squares";
-        } else if (normalized.includes("line") || normalized.includes("stripe")) {
-          patternShape = "lines";
-        } else if (normalized.includes("crosshatch") || normalized.includes("sketch") || normalized.includes("hatch")) {
-          patternShape = "crosshatch";
-        }
-
-        return {
-          sourceMode: normalized.includes("text") ? "text" : "shape",
-          shapeKey: shapeKey,
-          textString: normalized.includes("text") ? (pr.match(/[A-Za-z0-9]+/)?.[0]?.substring(0, 4).toUpperCase() || "AI") : "AI",
-          distance: 5.0,
-          lighting: {
-            intensity: surface === "glass" ? 1.8 : 1.2,
-            fillIntensity: 0.8,
-            ambientIntensity: 0.15,
-            angleDegrees: 135,
-            height: 5.0
-          },
-          material: {
-            surface: surface,
-            color: materialColor,
-            roughness: roughness,
-            metalness: metalness,
-            thickness: 150,
-            refraction: 1.5,
-            environmentPower: surface === "glass" ? 5.0 : 2.0
-          },
-          halftone: {
-            shape: patternShape,
-            scale: normalized.includes("high density") || normalized.includes("fine") ? 55.0 : 35.0,
-            power: 0.2,
-            toneTarget: normalized.includes("dark") ? "dark" : "light",
-            width: 0.5,
-            imageContrast: 1.2,
-            dashColor: dashColor,
-            hoverDashColor: hoverDashColor,
-            gridAngle: 45.0,
-            useImageColors: false,
-            waveAmplitude: waveAmplitude,
-            waveFrequency: waveFrequency
-          },
-          background: {
-            transparent: transparent,
-            color: bgColor
-          }
-        };
-      };
-
       const modelsToTry = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
       let response;
       let generatedByAI = false;
@@ -414,6 +413,7 @@ Make sure values are highly artistic, vibrant, and coordinated:
       if (generatedByAI && response) {
         try {
           designSettings = JSON.parse(response.text || "{}");
+          if (designSettings.background) designSettings.background.transparent = true;
         } catch (jsonErr) {
           console.error("Failed to parse Gemini generated response as JSON, falling back to heuristic:", jsonErr);
           designSettings = generateFallbackPreset(prompt);
