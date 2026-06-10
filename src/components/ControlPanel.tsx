@@ -195,7 +195,7 @@ export default function ControlPanel({
               hoverDashColor: generated.hoverDashColor,
             },
             gradient: {
-              ...prev.gradient,
+                ...prev.gradient,
               stops: generated.stops,
             }
           }));
@@ -211,15 +211,63 @@ export default function ControlPanel({
         }
       }
     } catch (err) {
-      console.warn("Faced issue generating creative palette from Gemini, falling back to curated pool:", err);
+      console.warn("Faced issue generating creative palette from Gemini, falling back to procedural:", err);
     } finally {
       setIsGeneratingPalette(false);
     }
 
-    // Fallback block if API fails or unconfigured
-    const randomIndex = Math.floor(Math.random() * activePalettes.length);
-    const selected = activePalettes[randomIndex];
-    
+    // --- PROCEDURAL INFINITE HARMONY FALLBACK ---
+    // Generates a complete, unique, beautifully harmonized procedural color layout
+    const baseHue = Math.floor(Math.random() * 360);
+    const mHue = (baseHue + 120 + Math.floor(Math.random() * 60)) % 360;
+    const dHue = (baseHue + 240 + Math.floor(Math.random() * 60)) % 360;
+
+    const toHexStr = (h: number, s: number, l: number) => {
+      l /= 100;
+      const a = (s * Math.min(l, 1 - l)) / 100;
+      const f = (n: number) => {
+        const k = (n + h / 30) % 12;
+        const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+        return Math.round(255 * color).toString(16).padStart(2, '0');
+      };
+      return `#${f(0)}${f(8)}${f(4)}`;
+    };
+
+    const makePalette = (pLabel: string, hBase: number) => {
+      const mh = (hBase + 120 + Math.floor(Math.random() * 40)) % 360;
+      const dh = (hBase + 240 + Math.floor(Math.random() * 40)) % 360;
+      const bg = toHexStr(hBase, 15 + Math.floor(Math.random() * 10), 3 + Math.floor(Math.random() * 4));
+      const mat = toHexStr(mh, 80 + Math.floor(Math.random() * 20), 45 + Math.floor(Math.random() * 15));
+      const dash = toHexStr(dh, 85 + Math.floor(Math.random() * 15), 50 + Math.floor(Math.random() * 15));
+      const hoverDash = Math.random() > 0.65 ? '#ffffff' : toHexStr((dh + 180) % 360, 95, 75);
+
+      return {
+        name: pLabel,
+        background: bg,
+        material: mat,
+        dashColor: dash,
+        hoverDashColor: hoverDash,
+        stops: [
+          { offset: 0.0, color: toHexStr(hBase, 20, 8) },
+          { offset: 0.5, color: mat },
+          { offset: 1.0, color: dash }
+        ]
+      };
+    };
+
+    const adjs = ["Vortex", "Quantum", "Nebula", "Solar", "Cosmic", "Acid", "Synth", "Retro", "Echo", "Prism", "Saffron", "Astro", "Nova", "Plasma", "Holo", "Hydro"];
+    const nouns = ["Sway", "Drift", "Flow", "Grid", "Matrix", "Chroma", "Pulse", "Warp", "Glow", "Aura", "Torus", "Eclipse", "Rift", "Dust", "Wave", "Helix"];
+    const randomName = `${adjs[Math.floor(Math.random() * adjs.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`;
+
+    const selected = makePalette(randomName, baseHue);
+
+    // Create 6 other unique alternative sidebar schemes
+    const freshCurated = Array.from({ length: 6 }, (_, i) => {
+      const uniqueBase = (baseHue + ((i + 1) * 60)) % 360;
+      const alternativeName = `${adjs[(Math.floor(Math.random() * adjs.length) + i) % adjs.length]} ${nouns[(Math.floor(Math.random() * nouns.length) + i) % nouns.length]}`;
+      return makePalette(alternativeName, uniqueBase);
+    });
+
     onChange((prev) => ({
       ...prev,
       background: {
@@ -242,8 +290,9 @@ export default function ControlPanel({
       }
     }));
 
-    setPaletteToast(`Applied "${selected.name}" curated palette!`);
-    setTimeout(() => setPaletteToast(null), 3000);
+    setActivePalettes(freshCurated);
+    setPaletteToast(`Created infinite dynamic "${selected.name}" harmony & side options!`);
+    setTimeout(() => setPaletteToast(null), 4000);
   };
 
   // --- LOCAL RANGE CATALOG PRESETS ENGINE ---
@@ -513,10 +562,12 @@ export default function ControlPanel({
   // AI idea suggestions from Gemini
   const [suggestions, setSuggestions] = useState<{ name: string; prompt: string }[]>([]);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
 
   const rotateSuggestions = async () => {
     if (isSuggestionsLoading) return;
     setIsSuggestionsLoading(true);
+    setSuggestionsError(null);
     try {
       const response = await fetch("/api/gemini/suggest-concepts", {
         method: "POST",
@@ -527,10 +578,15 @@ export default function ControlPanel({
         const data = await response.json();
         if (data && Array.isArray(data.concepts) && data.concepts.length > 0) {
           setSuggestions(data.concepts);
+          setSuggestionsError(null);
         }
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setSuggestionsError(errData.error || "Gemini API key is not configured.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn("Faced issue loading suggestions from Gemini:", err);
+      setSuggestionsError(err.message || "Failed to contact local server endpoint.");
     } finally {
       setIsSuggestionsLoading(false);
     }
@@ -2085,6 +2141,24 @@ export default function StandaloneHalftoneViewer() {
                   </button>
 
                   <div className="flex flex-wrap gap-1.5 min-h-[34px] relative">
+                    {suggestionsError && (
+                      <div className="text-[10px] p-2.5 bg-red-950/20 border border-red-900/40 rounded-lg text-red-400 font-sans w-full leading-relaxed">
+                        <div className="font-bold flex items-center gap-1.5 text-red-300">
+                          <span>⚠️ Gemini API Not Active</span>
+                        </div>
+                        <p className="mt-1 text-[9.5px] text-zinc-400">
+                          {suggestionsError}
+                        </p>
+                        <div className="mt-2 pt-2 border-t border-red-900/20 text-[9px] text-zinc-400 leading-normal">
+                          <p className="font-semibold text-zinc-300 mb-0.5">How to fix in AI Studio:</p>
+                          1. Click on the <span className="font-semibold text-white">Gear Icon</span> (Settings) at the top right of the screen.<br />
+                          2. Open the <span className="font-semibold text-white">Secrets</span> or <span className="font-semibold text-white">Environment Variables</span> panel.<br />
+                          3. Add a secret named <code className="bg-black/40 px-1.5 py-0.5 rounded text-amber-400 font-mono text-[9px]">GEMINI_API_KEY</code> with your Gemini key as the value.<br />
+                          4. Restart or refresh the page to apply!
+                        </div>
+                      </div>
+                    )}
+
                     {isSuggestionsLoading ? (
                       // Beautiful dynamic skeleton loaders during dynamic Gemini API call!
                       Array.from({ length: 5 }).map((_, i) => (

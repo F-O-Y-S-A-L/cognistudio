@@ -271,6 +271,40 @@ async function startServer() {
 
   app.use(express.json());
   
+  // Safe debugging route to help the user diagnose environment variables
+  app.get("/api/debug-env", (req, res) => {
+    const keysInfo: Record<string, string> = {};
+    Object.keys(process.env).forEach(key => {
+      if (key.includes("GEMINI") || key.includes("API") || key.includes("KEY")) {
+        const val = process.env[key] || "";
+        if (!val) {
+          keysInfo[key] = "EMPTY/UNDEFINED";
+        } else {
+          const masked = val.length > 8 
+            ? `${val.substring(0, 6)}...${val.substring(val.length - 4)} (Length: ${val.length})` 
+            : `PRESENT BUT SHORT (Length: ${val.length})`;
+          keysInfo[key] = masked;
+        }
+      }
+    });
+
+    let envFileStatus = "Not found";
+    try {
+      const p = path.resolve(process.cwd(), '.env');
+      if (fs.existsSync(p)) {
+        envFileStatus = "Exists in workspace root";
+      }
+    } catch (e: any) {
+      envFileStatus = "Error: " + e.message;
+    }
+
+    res.json({
+      envFileStatus,
+      processCwd: process.cwd(),
+      variablesFound: keysInfo
+    });
+  });
+  
   // API route for dynamic AI suggestions
   app.post("/api/gemini/suggest-concepts", async (req, res) => {
     try {
@@ -443,8 +477,12 @@ Return a raw JSON object containing an array under the "concepts" key.`;
     try {
       const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
-        console.warn("[Gemini API] GEMINI_API_KEY environment variable is not configured.");
-        return res.status(400).json({ error: "GEMINI_API_KEY environment variable is not configured. Please supply it in your .env file." });
+        console.warn("[Gemini API] GEMINI_API_KEY environment variable is not configured. Returning custom procedurally generated harmonies with infinite combinations.");
+        const data = {
+          palette: generateProceduralPalette(),
+          curated: Array.from({ length: 6 }, () => generateProceduralPalette())
+        };
+        return res.json(data);
       }
 
       const ai = new GoogleGenAI({
