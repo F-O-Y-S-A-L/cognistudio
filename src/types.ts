@@ -32,6 +32,7 @@ export interface HalftoneSettings {
   width: number;
   imageContrast: number;
   dashColor: string;
+  hoverColorEnabled: boolean;
   hoverDashColor: string;
   gridAngle: number;
   useImageColors: boolean;
@@ -223,6 +224,7 @@ export const INITIAL_SETTINGS: AppSettings = {
     width: 0.46,
     imageContrast: 1.0,
     dashColor: '#4A38F5',
+    hoverColorEnabled: true,
     hoverDashColor: '#4A38F5',
     gridAngle: 45.0,
     useImageColors: false,

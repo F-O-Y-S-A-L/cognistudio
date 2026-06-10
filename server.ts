@@ -2,11 +2,48 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
-import dotenv from "dotenv";
+import 'dotenv/config';
+import fs from "fs";
 
-dotenv.config();
+console.log("[DEBUG] EXECUTING CORRECT SERVER.TS FILE");
 
-// Dynamic, smart local fallback style preset generator in case Gemini is transiently overloaded or API key is not configured
+// Fallback to manual loading if dotenv/config didn't pick it up
+if (!process.env.GEMINI_API_KEY) {
+  try {
+    const envPath = path.resolve(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf-8');
+      content.split(/\r?\n/).forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) return;
+        
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx === -1) return;
+        
+        const key = trimmed.substring(0, eqIdx).trim();
+        let value = trimmed.substring(eqIdx + 1).trim();
+        
+        // Remove trailing comment
+        const hashIdx = value.indexOf('#');
+        if (hashIdx !== -1) {
+          value = value.substring(0, hashIdx).trim();
+        }
+        
+        // Strip single/double quotes around value
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.substring(1, value.length - 1).trim();
+        }
+        
+        if (key && !process.env[key]) {
+          process.env[key] = value;
+        }
+      });
+      console.log("[DEBUG] Manually loaded .env. GEMINI_API_KEY exists:", !!process.env.GEMINI_API_KEY);
+    }
+  } catch (e) {
+    console.error("[DEBUG] Failed to manually load .env", e);
+  }
+}
 const generateFallbackPreset = (pr: string) => {
   const normalized = pr.toLowerCase();
   
@@ -39,73 +76,99 @@ const generateFallbackPreset = (pr: string) => {
     shapeKey = "dollarCoin";
   }
 
-  let materialColor = "#22c55e"; 
-  let dashColor = "#2563eb"; 
-  let hoverDashColor = "#dc2626"; 
-  let bgColor = "#000000";
+  // Generate beautiful randomized color coordinates procedurally by default on start
+  const randomHue = Math.floor(Math.random() * 360);
+  const mHue = (randomHue + 120 + Math.floor(Math.random() * 60)) % 360;
+  const dHue = (randomHue + 240 + Math.floor(Math.random() * 60)) % 360;
+
+  // Local HSL helper to ensure random fallback combinations are always mathematically harmonious
+  const toHexStr = (h: number, s: number, l: number) => {
+    l /= 100;
+    const a = (s * Math.min(l, 1 - l)) / 100;
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  };
+
+  let materialColor = toHexStr(mHue, 80 + Math.round(Math.random() * 20), 45 + Math.round(Math.random() * 15)); 
+  let dashColor = toHexStr(dHue, 85 + Math.round(Math.random() * 15), 50 + Math.round(Math.random() * 15)); 
+  let hoverDashColor = Math.random() > 0.6 ? '#ffffff' : toHexStr((dHue + 180) % 360, 95, 75); 
+  let bgColor = toHexStr(randomHue, 15 + Math.round(Math.random() * 10), 3 + Math.round(Math.random() * 5));
   let transparent = true;
   let surface = "solid";
-  let roughness = 0.4;
-  let metalness = 0.5;
+  let roughness = 0.35 + Math.random() * 0.2;
+  let metalness = 0.3 + Math.random() * 0.4;
   let waveAmplitude = 0.0;
-  let waveFrequency = 2.5;
+  let waveFrequency = 1.5 + Math.random() * 2.5;
 
   if (normalized.includes("neon") || normalized.includes("cyber") || normalized.includes("matrix")) {
-    materialColor = "#00ffcc";
-    dashColor = "#ff007f";
-    hoverDashColor = "#39ff14";
-    bgColor = "#030712";
+    const cyberHue = Math.floor(Math.random() * 360);
+    materialColor = toHexStr(cyberHue, 95 + Math.floor(Math.random() * 5), 45 + Math.floor(Math.random() * 10)); 
+    dashColor = toHexStr((cyberHue + 120 + Math.floor(Math.random() * 60)) % 360, 95, 50); 
+    hoverDashColor = toHexStr((cyberHue + 240 + Math.floor(Math.random() * 60)) % 360, 95, 60); 
+    bgColor = toHexStr(cyberHue, 20 + Math.floor(Math.random() * 10), 2 + Math.floor(Math.random() * 3));
   } else if (normalized.includes("solar") || normalized.includes("sun") || normalized.includes("fire") || normalized.includes("gold") || normalized.includes("orange") || normalized.includes("fiery")) {
-    materialColor = "#f59e0b"; 
-    dashColor = "#dc2626"; 
-    hoverDashColor = "#fbbf24"; 
-    bgColor = "#080200";
+    const solarHue = Math.floor(Math.random() * 45); // Red to warm orange/yellow
+    materialColor = toHexStr(solarHue, 90 + Math.floor(Math.random() * 10), 45 + Math.floor(Math.random() * 15)); 
+    dashColor = toHexStr((solarHue + 30 + Math.floor(Math.random() * 25)) % 360, 95, 50); 
+    hoverDashColor = toHexStr((solarHue + 180) % 360, 90, 70); 
+    bgColor = toHexStr(solarHue, 30 + Math.floor(Math.random() * 15), 2 + Math.floor(Math.random() * 4));
   } else if (normalized.includes("matrix") || normalized.includes("emerald") || normalized.includes("hacker") || normalized.includes("green")) {
-    materialColor = "#10b981"; 
-    dashColor = "#047857"; 
-    hoverDashColor = "#00ff00"; 
-    bgColor = "#020617";
+    const greenHue = 90 + Math.floor(Math.random() * 60); // Pure lush emerald to vibrant lime
+    materialColor = toHexStr(greenHue, 85 + Math.floor(Math.random() * 15), 40 + Math.floor(Math.random() * 15)); 
+    dashColor = toHexStr((greenHue + 60) % 360, 90, 45); 
+    hoverDashColor = toHexStr((greenHue + 180) % 360, 95, 70); 
+    bgColor = toHexStr(greenHue, 20 + Math.floor(Math.random() * 10), 2 + Math.floor(Math.random() * 3));
   } else if (normalized.includes("glass") || normalized.includes("refract") || normalized.includes("prism") || normalized.includes("crystal")) {
     surface = "glass";
-    materialColor = "#38bdf8"; 
-    dashColor = "#4f46e5"; 
-    hoverDashColor = "#ec4899"; 
-    roughness = 0.1;
-    metalness = 0.9;
+    const glassHue = Math.floor(Math.random() * 360);
+    materialColor = toHexStr(glassHue, 60 + Math.floor(Math.random() * 30), 55 + Math.floor(Math.random() * 15)); 
+    dashColor = toHexStr((glassHue + 120) % 360, 75 + Math.floor(Math.random() * 20), 45 + Math.floor(Math.random() * 15)); 
+    hoverDashColor = toHexStr((glassHue + 240) % 360, 90, 70); 
+    roughness = 0.02 + Math.random() * 0.15;
+    metalness = 0.75 + Math.random() * 0.2;
   } else if (normalized.includes("water") || normalized.includes("droplet") || normalized.includes("liquid") || normalized.includes("sea") || normalized.includes("ocean") || normalized.includes("blue")) {
-    materialColor = "#06b6d4"; 
-    dashColor = "#2563eb"; 
-    hoverDashColor = "#00ffff"; 
-    waveAmplitude = 0.8;
-    waveFrequency = 3.0;
+    const blueHue = 180 + Math.floor(Math.random() * 60); // Turquoise to deep sea royal blue
+    materialColor = toHexStr(blueHue, 85 + Math.floor(Math.random() * 15), 45 + Math.floor(Math.random() * 15)); 
+    dashColor = toHexStr((blueHue + 60) % 360, 85, 45); 
+    hoverDashColor = toHexStr((blueHue + 180) % 360, 95, 70); 
+    waveAmplitude = 0.4 + Math.random() * 0.6;
+    waveFrequency = 2.0 + Math.random() * 3.0;
   } else if (normalized.includes("zen") || normalized.includes("lotus") || normalized.includes("teal") || normalized.includes("soft")) {
-    materialColor = "#14b8a6"; 
-    dashColor = "#0d9488"; 
-    hoverDashColor = "#38bdf8"; 
-    bgColor = "#0a0a0a";
+    const zenHue = 150 + Math.floor(Math.random() * 50); // Muted organic teals, greens, mints
+    materialColor = toHexStr(zenHue, 50 + Math.floor(Math.random() * 30), 45 + Math.floor(Math.random() * 15)); 
+    dashColor = toHexStr((zenHue + 100) % 360, 60 + Math.floor(Math.random() * 20), 40 + Math.floor(Math.random() * 15)); 
+    hoverDashColor = toHexStr((zenHue + 200) % 360, 80, 70); 
+    bgColor = toHexStr(zenHue, 10 + Math.floor(Math.random() * 10), 3 + Math.floor(Math.random() * 4));
   } else if (normalized.includes("retro") || normalized.includes("sunset") || normalized.includes("purple") || normalized.includes("pink") || normalized.includes("violet")) {
-    materialColor = "#d946ef"; 
-    dashColor = "#7c3aed"; 
-    hoverDashColor = "#f43f5e"; 
-    bgColor = "#0c0a0f";
+    const retroHue = 270 + Math.floor(Math.random() * 60); // Synthwave violets, magentas, hot pinks
+    materialColor = toHexStr(retroHue, 80 + Math.floor(Math.random() * 20), 45 + Math.floor(Math.random() * 15)); 
+    dashColor = toHexStr((retroHue + 120) % 360, 85, 45); 
+    hoverDashColor = toHexStr((retroHue + 240) % 360, 95, 70); 
+    bgColor = toHexStr(retroHue, 20 + Math.floor(Math.random() * 15), 2 + Math.floor(Math.random() * 4));
   } else if (normalized.includes("steel") || normalized.includes("brutalist") || normalized.includes("metal") || normalized.includes("silver") || normalized.includes("grey") || normalized.includes("gray")) {
-    materialColor = "#94a3b8"; 
-    dashColor = "#334155"; 
-    hoverDashColor = "#ffd700"; 
-    metalness = 0.8;
-    roughness = 0.2;
-    bgColor = "#090d16";
+    const monoHue = Math.floor(Math.random() * 360);
+    materialColor = toHexStr(monoHue, 5 + Math.floor(Math.random() * 15), 45 + Math.floor(Math.random() * 20)); 
+    dashColor = toHexStr((monoHue + 180) % 360, 10 + Math.floor(Math.random() * 20), 20 + Math.floor(Math.random() * 15)); 
+    hoverDashColor = Math.random() > 0.5 ? "#ffffff" : toHexStr(Math.floor(Math.random() * 360), 95, 65); 
+    metalness = 0.5 + Math.random() * 0.45;
+    roughness = 0.1 + Math.random() * 0.35;
+    bgColor = toHexStr(monoHue, 5 + Math.floor(Math.random() * 10), 4 + Math.floor(Math.random() * 5));
   } else if (normalized.includes("vintage") || normalized.includes("news") || normalized.includes("monochrome") || normalized.includes("black") || normalized.includes("white")) {
-    materialColor = "#ffffff";
-    dashColor = "#000000";
-    hoverDashColor = "#525252";
-    bgColor = "#ffffff";
+    const isDarkTheme = Math.random() > 0.5;
+    materialColor = isDarkTheme ? "#f7f7f7" : "#121212";
+    dashColor = isDarkTheme ? "#121212" : "#f7f7f7";
+    hoverDashColor = isDarkTheme ? toHexStr(Math.floor(Math.random() * 360), 95, 55) : toHexStr(Math.floor(Math.random() * 360), 95, 45);
+    bgColor = isDarkTheme ? "#ffffff" : "#0a0a0a";
     transparent = false;
   }
 
   if (normalized.includes("liquid") || normalized.includes("wave") || normalized.includes("sway") || normalized.includes("flow") || normalized.includes("active") || normalized.includes("fluid")) {
-    waveAmplitude = waveAmplitude || 0.6;
-    waveFrequency = waveFrequency || 3.0;
+    waveAmplitude = waveAmplitude || (0.4 + Math.random() * 0.7);
+    waveFrequency = waveFrequency || (1.5 + Math.random() * 3.5);
   }
 
   let patternShape = "dots";
@@ -159,7 +222,50 @@ const generateFallbackPreset = (pr: string) => {
   };
 };
 
+function generateProceduralConcept() {
+  const emojis = ["🪐", "🧬", "🔮", "💎", "💻", "🏵️", "🌀", "🌊", "👁️", "⚡", "🔥", "🌸", "🎏", "🌠", "🛰️", "🛸", "🗼", "🎇", "☄️", "🌋", "🎆", "🎭", "🎪", "⛲"];
+  const adjs = ["Quantum", "Nebula", "Solar", "Cosmic", "Hyper", "Ethereal", "Acid", "Plasma", "Astral", "Synthetic", "Vapor", "Vortex", "Stardust", "Liquid", "Glassy", "Super", "Abyssal", "Onyx", "Saffron", "Prism", "Holographic", "Chroma", "Spectra", "Sublime", "Flux", "Retro", "Brutalist", "Galactic", "Magnetic", "Obsidian"];
+  const nouns = ["Core", "Torus", "Eclipse", "Knot", "Matrix", "Globe", "Wave", "Glow", "Aura", "Shell", "Drift", "Grid", "Pulsar", "Prism", "Fringe", "Vibe", "Voxel", "Echo", "Mirage", "Nexus", "Circuit", "Helix", "Sway", "Vortex", "Horizon", "Beacon"];
+  const shapes = ["torusKnot", "icosahedron", "sphere", "torus", "customGrid", "hyperbolicTorus", "mobiusStrip", "capsule", "concentricRings", "waveField", "octahedron", "dodecahedron", "box", "cone", "cylinder"];
+  const patterns = ["dots", "squares", "lines", "crosshatch"];
+  
+  const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+  const adj = adjs[Math.floor(Math.random() * adjs.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  const shape = shapes[Math.floor(Math.random() * shapes.length)];
+  const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+
+  const colors = [
+    "glowing neon cyan and vivid violet highlight",
+    "sunburst coral, hot amber-red and polished dark gold material style",
+    "hyper-acid green matrix rays and neon radioactive yellow",
+    "gorgeous polished copper, deep black velvet, and blazing orange glow",
+    "glassy blue-sky glass, soft pastel blossom lavender and sweet peach",
+    "abyssal oceanic sapphire, bioluminescent teal, and white-hot spark dots",
+    "liquid mercury chrome metallic look with deep indigo shadows",
+    "vibrant brutalist manganese yellow, raw iron grey and signal orange dots",
+    "dreamy synthwave magenta gradients, dark starlight cobalt and pale violet mist"
+  ];
+  const color = colors[Math.floor(Math.random() * colors.length)];
+
+  const detailTemplates = [
+    `A rendering of a 3D ${shape} with high-density ${pattern} halftone layout, styled with ${color}.`,
+    `Dynamic floating 3D ${shape} of rich depth on transparent dark canvas, accented with ${pattern} lines and ${color}.`,
+    `Interactive procedural refractive 3D ${shape} utilizing ${color} and detailed alignment of ${pattern} cells.`,
+    `An aesthetic avant-garde 3D ${shape} showing striking contrast, uses ${pattern} mesh overlay and ${color} glow.`
+  ];
+  const detail = detailTemplates[Math.floor(Math.random() * detailTemplates.length)];
+
+  return {
+    name: `${emoji} ${adj} ${noun}`,
+    prompt: detail
+  };
+}
+
 async function startServer() {
+  console.log("[DEBUG] Current working directory:", process.cwd());
+  console.log("[DEBUG] Env keys after loading:", Object.keys(process.env).filter(k => k.includes('GEMINI')));
+  
   const app = express();
   const PORT = 3000;
 
@@ -168,28 +274,10 @@ async function startServer() {
   // API route for dynamic AI suggestions
   app.post("/api/gemini/suggest-concepts", async (req, res) => {
     try {
-      const fallbackPool = [
-        { name: "🎴 Solar Flare", prompt: "A warm blazing solar eclipse with fiery gold colors, thin concentric circles and smooth halo glow" },
-        { name: "💻 Neon Matrix", prompt: "Emerald retro digital hacker code matrix, high density square halftone in dark background" },
-        { name: "🔮 Glass Torus", prompt: "A beautiful glassy refraction torus with shiny metalness, light pastel blue colors and crosshatch dots" },
-        { name: "🪙 Cyber Coin", prompt: "A sleek silver sun coin with high-tech cyan vector dots, moody directional light and dark transparent glass" },
-        { name: "🪐 Cosmic Blast", prompt: "Cosmic stardust nebula icosahedron, cyan and magenta halftone dots, floating on transparent canvas" },
-        { name: "🌸 Zen Lotus", prompt: "Zen lotus coin with teal circles halftone, soft white matte material, clean ambient studio lights" },
-        { name: "🌇 Retro Sunset", prompt: "Cyberpunk highway neon sunset grid, violet cylinder, high metalness, bright pink glowing lines" },
-        { name: "💎 Crystal Prism", prompt: "Prismatic crystal pyramid, high environmental power, multi-colored dots overlap, black transparent space" },
-        { name: "⚙️ Brutalist Steel", prompt: "Brutalist bold steel box with heavy yellow crosshatch dots, high contrast edge light, dark shadow" },
-        { name: "💧 Water Droplet", prompt: "Glistening water droplet sphere, high thickness refraction, liquid pattern, neon green halftone accents" }
-      ];
-
-      const generateFallbackConcepts = () => {
-        const shuffled = [...fallbackPool].sort(() => 0.5 - Math.random());
-        return shuffled.slice(0, 5);
-      };
-
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
-        console.warn("[Gemini API] GEMINI_API_KEY environment variable is not configured. Falling back to local pool gracefully.");
-        return res.json({ concepts: generateFallbackConcepts() });
+        console.warn("[Gemini API] GEMINI_API_KEY environment variable is not configured.");
+        return res.status(400).json({ error: "GEMINI_API_KEY environment variable is not configured. Please supply it in your .env file." });
       }
 
       const ai = new GoogleGenAI({
@@ -211,6 +299,7 @@ Return a raw JSON object containing an array under the "concepts" key.`;
 
       const suggestConfig = {
         systemInstruction,
+        temperature: 1.1,
         responseMimeType: "application/json" as const,
         responseSchema: {
           type: Type.OBJECT,
@@ -236,12 +325,27 @@ Return a raw JSON object containing an array under the "concepts" key.`;
       let response;
       let generatedByAI = false;
 
+      // Select a fully randomized target theme dynamically to force completely new suggestions on every API call!
+      const themes = [
+        "Cyberpunk Neon & Retro Hacker", 
+        "Minimalist Sage Japanese Zen & Organic Material", 
+        "Glass Prismatic Refractions & Holographic Iridescence", 
+        "Raw Brutalist Steel Space Station Interface", 
+        "Psychedelic Liquid Lava-Lamp Swaying Gradients", 
+        "Dreamy Synthwave Magenta Sunset & Retro grid lines", 
+        "Deep Abyss Oceanic Glowing Coral & Bioluminescent Dots", 
+        "Astral Cosmic Solar eclipses with Gold Halftone halos",
+        "Aesthetic Pastel Whimsey candy-coated glass spheres"
+      ];
+      const randomTheme = themes[Math.floor(Math.random() * themes.length)];
+      const randomSeed = Math.random().toString(36).substring(4);
+
       for (const model of modelsToTry) {
         try {
           console.log(`Generating suggestions using model: ${model}`);
           response = await ai.models.generateContent({
             model,
-            contents: "Please generate 5 extremely cool and different 3D halftone design concept prompts. Be creative, neon, liquid, artistic, spacey, glass-like, retro or futuristic. Do not duplicate.",
+            contents: `Please generate 5 extremely cool and completely different 3D halftone design concept prompts. Focus primarily on the organic style: "${randomTheme}". Be creative, artistic, and do NOT duplicate previous names. Make sure the designs have rich visual variety. Seed Identifier: ${randomSeed}`,
             config: suggestConfig
           });
           if (response && response.text) {
@@ -267,17 +371,242 @@ Return a raw JSON object containing an array under the "concepts" key.`;
         try {
           data = JSON.parse(response.text || "{}");
         } catch (jsonErr) {
-          console.error("Failed to parse suggest response as JSON, falling back to local pool:", jsonErr);
-          data = { concepts: generateFallbackConcepts() };
+          console.error("Failed to parse suggest response as JSON, falling back to procedural:", jsonErr);
+          data = {
+            concepts: Array.from({ length: 5 }, () => generateProceduralConcept())
+          };
         }
       } else {
-        data = { concepts: generateFallbackConcepts() };
+        console.warn("All Gemini models bypassed or failed. Selecting 5 fully randomized procedural concept prompts.");
+        data = {
+          concepts: Array.from({ length: 5 }, () => generateProceduralConcept())
+        };
       }
 
       res.json(data);
     } catch (error: any) {
       console.log(`[Gemini API] Failed to run suggestions endpoint: ${error?.message || error}`);
-      res.status(500).json({ error: error.message || "Failed to generate suggestions" });
+      res.status(500).json({ error: error.message || "Failed to generate suggestions with Gemini API" });
+    }
+  });
+
+  // Helper functions for dynamic procedural color generation when API is unavailable or for extra variety
+  function hslToHex(h: number, s: number, l: number): string {
+    l /= 100;
+    const a = (s * Math.min(l, 1 - l)) / 100;
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  }
+
+  function generateProceduralPalette(namePrefix?: string) {
+    const baseHue = Math.floor(Math.random() * 360);
+    const materialHue = (baseHue + 120 + Math.floor(Math.random() * 60)) % 360;
+    const dashHue = (baseHue + 240 + Math.floor(Math.random() * 60)) % 360;
+    
+    const bgHue = baseHue;
+    const bgSat = 12 + Math.floor(Math.random() * 12); // 12% - 24%
+    const bgLight = 2 + Math.floor(Math.random() * 6); // 2% - 8%
+    const background = hslToHex(bgHue, bgSat, bgLight);
+    
+    const material = hslToHex(materialHue, 80 + Math.floor(Math.random() * 20), 45 + Math.floor(Math.random() * 15));
+    const dashColor = hslToHex(dashHue, 85 + Math.floor(Math.random() * 15), 50 + Math.floor(Math.random() * 15));
+    const hoverDashColor = Math.random() > 0.6 ? '#ffffff' : hslToHex((dashHue + 180) % 360, 95, 75);
+
+    const stop1 = hslToHex(bgHue, bgSat + 8, bgLight + 4);
+    const stop2 = material;
+    const stop3 = dashColor;
+    
+    const nameParts1 = ["Vortex", "Quantum", "Nebula", "Solar", "Cosmic", "Hyper", "Cyber", "Ethereal", "Acid", "Plasma", "Astral", "Synthetic", "Chroma", "Spectra", "Prism", "Sublime", "Flux"];
+    const nameParts2 = ["Dust", "Core", "Flare", "Shade", "Grid", "Shell", "Pulse", "Warp", "Drift", "Ghost", "Matrix", "Wave", "Reflect", "Glow", "Nexus", "Aura", "Torus", "Eclipse"];
+    const finalName = namePrefix || `${nameParts1[Math.floor(Math.random() * nameParts1.length)]} ${nameParts2[Math.floor(Math.random() * nameParts2.length)]}`;
+    
+    return {
+      name: finalName,
+      background,
+      material,
+      dashColor,
+      hoverDashColor,
+      stops: [
+        { offset: 0.0, color: stop1 },
+        { offset: 0.5, color: stop2 },
+        { offset: 1.0, color: stop3 }
+      ]
+    };
+  }
+
+  // API route for dynamic custom palette generation
+  app.post("/api/gemini/generate-palette", async (req, res) => {
+    try {
+      const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        console.warn("[Gemini API] GEMINI_API_KEY environment variable is not configured.");
+        return res.status(400).json({ error: "GEMINI_API_KEY environment variable is not configured. Please supply it in your .env file." });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const systemInstruction = `You are a world-class typographic, color theorist, and generative digital artist.
+Your task is to generate one master, active color palette ('palette') and exactly 6 highly diverse, creative, and beautiful alternative color palettes ('curated') for a 3D HTML5 halftone rendering app.
+Be incredibly unique and avant-garde! Invent ultra-modern color combinations (e.g. Cyberpunk glow, warm sunset flares, emerald chemical matrices, vaporwave purple/teals, dark brutalist slate, neon acid orange).
+Ensure high-contrast backgrounds and gorgeous material vs halftone colors.
+
+The JSON schema requires:
+1. 'palette' (the main active design palette)
+2. 'curated' (exactly 6 alternative design palettes)
+
+Each palette must have:
+- name: A cool descriptive name (max 20 characters)
+- background: Sleek hex color string
+- material: Main color for the 3D matte surface
+- dashColor: High-contrast halftone dot color
+- hoverDashColor: Complementary glow hover color
+- stops: Exactly 3 gradient stops (spanning from offset 0.0 to 1.0) with custom hex color values.`;
+
+      const paletteConfig = {
+        systemInstruction,
+        responseMimeType: "application/json" as const,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            palette: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING, description: "Name of the palette, max 20 chars" },
+                background: { type: Type.STRING },
+                material: { type: Type.STRING },
+                dashColor: { type: Type.STRING },
+                hoverDashColor: { type: Type.STRING },
+                stops: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      offset: { type: Type.NUMBER },
+                      color: { type: Type.STRING }
+                    },
+                    required: ["offset", "color"]
+                  }
+                }
+              },
+              required: ["name", "background", "material", "dashColor", "hoverDashColor", "stops"]
+            },
+            curated: {
+              type: Type.ARRAY,
+              description: "Strictly 6 highly diverse alternative color palettes",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING, description: "Name of the alternative palette" },
+                  background: { type: Type.STRING },
+                  material: { type: Type.STRING },
+                  dashColor: { type: Type.STRING },
+                  hoverDashColor: { type: Type.STRING },
+                  stops: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        offset: { type: Type.NUMBER },
+                        color: { type: Type.STRING }
+                      },
+                      required: ["offset", "color"]
+                    }
+                  }
+                },
+                required: ["name", "background", "material", "dashColor", "hoverDashColor", "stops"]
+              }
+            }
+          },
+          required: ["palette", "curated"]
+        },
+        temperature: 1.0
+      };
+
+      const randomThemes = [
+        "Retro Synthwave with warm violet, dark cobalt neon and hot magenta highlights",
+        "Japanese Sakura with elegant peach blooms, soft cherry reds, and fresh mint greens",
+        "Brutalist industrial structure with high-contrast glowing safety warning orange and stark dark charcoal black",
+        "Deep Oceanic abyss with glowing neon bioluminescent cyan beads and dark sapphire depths",
+        "Golden sand solar flare with magnificent metallic copper and highly polished warm luxury yellow",
+        "Lime acid toxicity with hyper-radioactive green flares and dark volcanic basalt stone background",
+        "Cyberpunk cyberpunk overdrive with glowing hot-pinks, screaming chartreuse, and deep galactic purple sky",
+        "Cosmic hyper-space rift with bright mystical cyan, interstellar magenta, and deep ambient stardust purple",
+        "Vaporwave pastel horizon with soft dreamy sunset orange, pale lilac mist, and cool teal reflections"
+      ];
+      const chosenThemeSelected = randomThemes[Math.floor(Math.random() * randomThemes.length)];
+      const seedStringValue = Math.random().toString(36).substring(4);
+
+      const modelsToTry = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
+      let response;
+      let generatedByAI = false;
+
+      for (const model of modelsToTry) {
+        try {
+          console.log(`Generating interactive master + 6 alternative design palettes using: ${model}. Theme chosen: ${chosenThemeSelected}`);
+          response = await ai.models.generateContent({
+            model,
+            contents: `Please generate one perfect master palette (inspired by ${chosenThemeSelected}) and 6 highly distinct alternative design palettes with beautiful modern color harmony options. Random Seed: ${seedStringValue}. Do not repeat color coordinates. Ensure rich variation, high brightness contrast and artistic names!`,
+            config: paletteConfig
+          });
+          if (response && response.text) {
+            generatedByAI = true;
+            break;
+          }
+        } catch (err: any) {
+          const rawMsg = err?.message || String(err);
+          let reasonOfFail = "Temporarily Unavailable";
+          if (rawMsg.includes("429") || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("quota")) {
+            reasonOfFail = "Rate-Limit or Quota Exceeded (429)";
+          } else if (rawMsg.includes("503") || rawMsg.includes("UNAVAILABLE") || rawMsg.includes("demand")) {
+            reasonOfFail = "Model experiencing heavy demand (503)";
+          } else {
+            reasonOfFail = rawMsg.substring(0, 100);
+          }
+          console.log(`[Gemini API] Palette model ${model} bypassed. Reason: ${reasonOfFail}`);
+        }
+      }
+
+      let data;
+      if (generatedByAI && response) {
+        try {
+          data = JSON.parse(response.text || "{}");
+          // Ensure structure has valid elements, otherwise procedurally back them up
+          if (!data.palette) {
+            data.palette = generateProceduralPalette();
+          }
+          if (!data.curated || !Array.isArray(data.curated) || data.curated.length < 3) {
+            data.curated = Array.from({ length: 6 }, () => generateProceduralPalette());
+          }
+        } catch (jsonErr) {
+          console.error("Failed to parse palette response as JSON, falling back procedurally:", jsonErr);
+          data = {
+            palette: generateProceduralPalette(),
+            curated: Array.from({ length: 6 }, () => generateProceduralPalette())
+          };
+        }
+      } else {
+        console.warn("All Gemini models bypassed or failed. Selecting hermosa procedural infinite variety falls.");
+        data = {
+          palette: generateProceduralPalette(),
+          curated: Array.from({ length: 6 }, () => generateProceduralPalette())
+        };
+      }
+
+      res.json(data);
+    } catch (error: any) {
+      console.log(`[Gemini API] Failed to run palette generator endpoint: ${error?.message || error}`);
+      res.status(500).json({ error: error.message || "Failed to generate palette with Gemini API" });
     }
   });
 
@@ -289,13 +618,16 @@ Return a raw JSON object containing an array under the "concepts" key.`;
         return res.status(400).json({ error: "Prompt is required" });
       }
 
-      const apiKey = process.env.GEMINI_API_KEY;
+      console.log("[DEBUG] Checking API Key...");
+      const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+      
       if (!apiKey) {
-        console.warn("[Gemini API] GEMINI_API_KEY environment variable is not configured. Falling back to dynamic heuristic local generator.");
+        console.warn("[Gemini API] GEMINI_API_KEY environment variable is not configured.");
         const designSettings = generateFallbackPreset(prompt);
-        return res.json({ settings: designSettings });
+        return res.json({ settings: designSettings, debug: "Key was missing" });
       }
 
+      console.log("[DEBUG] Gemini API Key Length:", apiKey.length);
       const ai = new GoogleGenAI({
         apiKey,
         httpOptions: {
@@ -316,6 +648,7 @@ Make sure values are highly artistic, vibrant, and coordinated:
 
       const generatorConfig = {
         systemInstruction,
+        temperature: 1.15,
         responseMimeType: "application/json" as const,
         responseSchema: {
           type: Type.OBJECT,
@@ -382,13 +715,14 @@ Make sure values are highly artistic, vibrant, and coordinated:
       const modelsToTry = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
       let response;
       let generatedByAI = false;
+      const apiSeed = Math.random().toString(36).substring(4);
 
       for (const model of modelsToTry) {
         try {
           console.log(`Generating design using model: ${model}`);
           response = await ai.models.generateContent({
             model,
-            contents: `Generate a gorgeous visual design preset style for: "${prompt}"`,
+            contents: `Generate an incredibly unique, highly creative and visually stunning 3D halftone design preset for the theme: "${prompt}". Highly randomize colors, lighting angles, scale factors, shapes, and materials (either glass or solid). Avoid standard colors. Be artistic and surprising! Seed token: ${apiSeed}`,
             config: generatorConfig
           });
           if (response && response.text) {
@@ -425,7 +759,7 @@ Make sure values are highly artistic, vibrant, and coordinated:
 
       res.json({ settings: designSettings });
     } catch (error: any) {
-      console.log(`[Gemini API] Failed to run design endpoint: ${error?.message || error}`);
+      console.error(`[Gemini API] Failed to run design endpoint:`, error);
       res.status(500).json({ error: error.message || "Failed to generate design with Gemini API" });
     }
   });

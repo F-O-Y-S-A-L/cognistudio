@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppSettings, SourceMode, INITIAL_SETTINGS } from '../types';
 import { 
   Eye, 
@@ -62,7 +62,7 @@ export default function ControlPanel({
   // Sidebar tab state matching twenty.com UI
   const [activeTab, setActiveTab] = useState<'design' | 'animations' | 'export'>('design');
 
-  const CURATED_PALETTES = [
+  const DEFAULT_PALETTES = [
     {
       name: "Cyberpunk Glow",
       background: "#05050a",
@@ -161,18 +161,71 @@ export default function ControlPanel({
     }
   ];
 
+  const [activePalettes, setActivePalettes] = useState(DEFAULT_PALETTES);
+
   const [paletteToast, setPaletteToast] = useState<string | null>(null);
 
-  const generateRandomPalette = () => {
-    const randomIndex = Math.floor(Math.random() * CURATED_PALETTES.length);
-    const selected = CURATED_PALETTES[randomIndex];
+  const [isGeneratingPalette, setIsGeneratingPalette] = useState(false);
+
+  const generateRandomPalette = async () => {
+    setIsGeneratingPalette(true);
+    try {
+      const response = await fetch('/api/gemini/generate-palette', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.palette) {
+          const generated = data.palette;
+          onChange((prev) => ({
+            ...prev,
+            background: {
+              ...prev.background,
+              color: generated.background,
+              transparent: true, // Keep background transparent!
+            },
+            material: {
+              ...prev.material,
+              color: generated.material,
+            },
+            halftone: {
+              ...prev.halftone,
+              dashColor: generated.dashColor,
+              hoverDashColor: generated.hoverDashColor,
+            },
+            gradient: {
+              ...prev.gradient,
+              stops: generated.stops,
+            }
+          }));
+
+          // dynamically set the side palettes to show the Gemini generated alternatives
+          if (data.curated && Array.isArray(data.curated) && data.curated.length > 0) {
+            setActivePalettes(data.curated);
+          }
+
+          setPaletteToast(`Gemini created "${generated.name}" design palette & curated schemes!`);
+          setTimeout(() => setPaletteToast(null), 4000);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("Faced issue generating creative palette from Gemini, falling back to curated pool:", err);
+    } finally {
+      setIsGeneratingPalette(false);
+    }
+
+    // Fallback block if API fails or unconfigured
+    const randomIndex = Math.floor(Math.random() * activePalettes.length);
+    const selected = activePalettes[randomIndex];
     
     onChange((prev) => ({
       ...prev,
       background: {
         ...prev.background,
         color: selected.background,
-        transparent: false,
+        transparent: true, // Keep background transparent!
       },
       material: {
         ...prev.material,
@@ -189,7 +242,7 @@ export default function ControlPanel({
       }
     }));
 
-    setPaletteToast(`Applied "${selected.name}" palette parameters!`);
+    setPaletteToast(`Applied "${selected.name}" curated palette!`);
     setTimeout(() => setPaletteToast(null), 3000);
   };
 
@@ -457,26 +510,8 @@ export default function ControlPanel({
   const [importCode, setImportCode] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
 
-  // AI idea suggestion presets pool
-  const CONCEPT_POOL = [
-    { name: "🎴 Solar Flare", prompt: "A warm blazing solar eclipse with fiery gold colors, thin concentric circles and smooth halo glow" },
-    { name: "💻 Neon Matrix", prompt: "Emerald retro digital hacker code matrix, high density square halftone in dark background" },
-    { name: "🔮 Glass Torus", prompt: "A beautiful glassy refraction torus with shiny metalness, light pastel blue colors and crosshatch dots" },
-    { name: "🪙 Cyber Coin", prompt: "A sleek silver sun coin with high-tech cyan vector dots, moody directional light and dark transparent glass" },
-    { name: "🪐 Cosmic Blast", prompt: "Cosmic stardust nebula icosahedron, cyan and magenta halftone dots, floating on transparent canvas" },
-    { name: "🌸 Zen Lotus", prompt: "Zen lotus coin with teal circles halftone, soft white matte material, clean ambient studio lights" },
-    { name: "🌇 Retro Sunset", prompt: "Cyberpunk highway neon sunset grid, violet cylinder, high metalness, bright pink glowing lines" },
-    { name: "💎 Crystal Prism", prompt: "Prismatic crystal pyramid, high environmental power, multi-colored dots overlap, black transparent space" },
-    { name: "⚙️ Brutalist Steel", prompt: "Brutalist bold steel box with heavy yellow crosshatch dots, high contrast edge light, dark shadow" },
-    { name: "💧 Water Droplet", prompt: "Glistening water droplet sphere, high thickness refraction, liquid pattern, neon green halftone accents" },
-    { name: "🐆 Vintage News", prompt: "Vintage monochrome newspaper print of an octahedron, large dots halftone, pure black and white high contrast" },
-    { name: "🎷 Brass Antique", prompt: "Art deco brass coin, dark bronze lines grid, warm spotlight angle, smooth metal roughness" },
-    { name: "🧬 Bio-Neon", prompt: "Glowing biological core structure, vibrant fluorescent pink and cyan halftone plasma, intricate neural network lines" },
-    { name: "🏔️ Arctic Peak", prompt: "Minimalist geometric mountain peak with icy blue crosshatch dots, clean white background, sharp edge lighting" },
-    { name: "⚡ Liquid Volt", prompt: "Spilled liquid electricity sphere, high-speed motion, electric yellow lines, cyan halftone particles" }
-  ];
-
-  const [suggestions, setSuggestions] = useState(() => CONCEPT_POOL.slice(0, 5));
+  // AI idea suggestions from Gemini
+  const [suggestions, setSuggestions] = useState<{ name: string; prompt: string }[]>([]);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
 
   const rotateSuggestions = async () => {
@@ -492,22 +527,18 @@ export default function ControlPanel({
         const data = await response.json();
         if (data && Array.isArray(data.concepts) && data.concepts.length > 0) {
           setSuggestions(data.concepts);
-        } else {
-          const shuffled = [...CONCEPT_POOL].sort(() => 0.5 - Math.random());
-          setSuggestions(shuffled.slice(0, 5));
         }
-      } else {
-        const shuffled = [...CONCEPT_POOL].sort(() => 0.5 - Math.random());
-        setSuggestions(shuffled.slice(0, 5));
       }
     } catch (err) {
-      console.warn("Faced issue loading suggestions from Gemini, falling back gracefully:", err);
-      const shuffled = [...CONCEPT_POOL].sort(() => 0.5 - Math.random());
-      setSuggestions(shuffled.slice(0, 5));
+      console.warn("Faced issue loading suggestions from Gemini:", err);
     } finally {
       setIsSuggestionsLoading(false);
     }
   };
+
+  useEffect(() => {
+    rotateSuggestions();
+  }, []);
 
   // Snippet Builders
   const getReactCode = () => {
@@ -1976,12 +2007,15 @@ export default function StandaloneHalftoneViewer() {
                       setIsAiGenerating(true);
                       setAiError(null);
                       try {
+                        console.log("[DEBUG:Client] Requesting design for prompt:", aiPrompt);
                         const res = await fetch('/api/gemini/generate-design', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ prompt: aiPrompt }),
                         });
+                        console.log("[DEBUG:Client] Response status:", res.status, "ok:", res.ok);
                         const data = await res.json();
+                        console.log("[DEBUG:Client] Data:", data);
                         if (res.ok && data.settings) {
                           onChange((prev) => {
                             const newSettings = { ...prev, ...data.settings };
@@ -2238,17 +2272,20 @@ export default function StandaloneHalftoneViewer() {
                 {/* Main Instant Generator Action button */}
                 <button
                   onClick={generateRandomPalette}
-                  className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono font-bold text-xs uppercase rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                  disabled={isGeneratingPalette}
+                  className={`w-full py-3 text-zinc-950 font-mono font-bold text-xs uppercase rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95 cursor-pointer ${
+                    isGeneratingPalette ? 'bg-amber-600/50 cursor-not-allowed text-zinc-800' : 'bg-amber-500 hover:bg-amber-400'
+                  }`}
                 >
-                  <RefreshCw size={13} className="animate-spin-slow text-zinc-950" />
-                  Apply Random Palette Harmony
+                  <RefreshCw size={13} className={`text-zinc-950 ${isGeneratingPalette ? 'animate-spin' : 'animate-spin-slow'}`} />
+                  {isGeneratingPalette ? 'Generating design palette...' : 'Apply Random Palette Harmony'}
                 </button>
 
                 {/* Quick grid choices */}
                 <div className="flex flex-col gap-2 mt-1">
                   <span className="text-[9px] font-bold font-mono text-zinc-550 tracking-wider">CURATED DESIGN SCHEMES</span>
                   <div className="grid grid-cols-2 gap-2">
-                    {CURATED_PALETTES.map((p, idx) => (
+                    {activePalettes.map((p, idx) => (
                       <button
                         key={idx}
                         onClick={() => {
@@ -2257,7 +2294,7 @@ export default function StandaloneHalftoneViewer() {
                             background: {
                               ...prev.background,
                               color: p.background,
-                              transparent: false,
+                              transparent: true, // Keep background transparent!
                             },
                             material: {
                               ...prev.material,
@@ -3038,6 +3075,26 @@ export default function StandaloneHalftoneViewer() {
                           Shadow-Tone
                         </button>
                       </div>
+                    </div>
+
+                    {/* Hover Effect Toggle */}
+                    <div className="flex items-center justify-between bg-zinc-950 border border-zinc-900 rounded-xl p-3 mb-3">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Hover Color Effect</span>
+                        <span className="text-[9px] text-zinc-500">Enable color shifting on mouse hover</span>
+                      </div>
+                      <button
+                        onClick={() => updateNestedSetting('halftone', 'hoverColorEnabled', !settings.halftone.hoverColorEnabled)}
+                        className={`w-9 h-5 rounded-full p-0.5 transition-colors focus:outline-none cursor-pointer ${
+                          settings.halftone.hoverColorEnabled !== false ? 'bg-amber-500' : 'bg-zinc-800'
+                        }`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded-full bg-zinc-950 transition-transform ${
+                            settings.halftone.hoverColorEnabled !== false ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
                     </div>
 
                     {/* Colors custom pickers */}

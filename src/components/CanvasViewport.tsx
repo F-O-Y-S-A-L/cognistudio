@@ -6,7 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { AppSettings } from '../types';
-import { RefreshCw, ZoomIn, ZoomOut, Move, Image as ImageIcon } from 'lucide-react';
+import { RefreshCw, ZoomIn, ZoomOut, Move, Image as ImageIcon, MousePointer } from 'lucide-react';
 
 interface CanvasViewportProps {
   settings: AppSettings;
@@ -2557,7 +2557,7 @@ export default function CanvasViewport({
       }
 
       // Hover color smooth interpolation blending
-      const targetHover = isHoveredRef.current ? 1.0 : 0.0;
+      const targetHover = (isHoveredRef.current && settingsRef.current.halftone.hoverColorEnabled !== false) ? 1.0 : 0.0;
       hoverProgressRef.current = THREE.MathUtils.lerp(hoverProgressRef.current, targetHover, 0.1);
       
       // Drag Flow inertia update
@@ -2837,7 +2837,7 @@ export default function CanvasViewport({
       />
 
       {/* Floating Toolbar Controls */}
-      <div className="absolute top-4 left-4 z-10 flex gap-1.5">
+      <div className="absolute top-4 left-4 z-10 flex gap-1.5 flex-wrap">
         <button
           id="btn-zoom-in"
           onClick={() => {
@@ -2845,7 +2845,7 @@ export default function CanvasViewport({
               onChange((prev) => ({ ...prev, distance: Math.max(1.5, Number((prev.distance - 0.5).toFixed(1))) }));
             }
           }}
-          className="p-1.5 bg-black/80 backdrop-blur border border-white/10 text-white/60 hover:text-white rounded hover:bg-neutral-900 active:scale-95 transition-all shadow-md"
+          className="p-1.5 bg-black/80 backdrop-blur border border-white/10 text-white/60 hover:text-white rounded hover:bg-neutral-900 active:scale-95 transition-all shadow-md cursor-pointer"
           title="Zoom In"
         >
           <ZoomIn size={14} />
@@ -2857,7 +2857,7 @@ export default function CanvasViewport({
               onChange((prev) => ({ ...prev, distance: Math.min(10.0, Number((prev.distance + 0.5).toFixed(1))) }));
             }
           }}
-          className="p-1.5 bg-black/80 backdrop-blur border border-white/10 text-white/60 hover:text-white rounded hover:bg-neutral-900 active:scale-95 transition-all shadow-md"
+          className="p-1.5 bg-black/80 backdrop-blur border border-white/10 text-white/60 hover:text-white rounded hover:bg-neutral-900 active:scale-95 transition-all shadow-md cursor-pointer"
           title="Zoom Out"
         >
           <ZoomOut size={14} />
@@ -2865,11 +2865,36 @@ export default function CanvasViewport({
         <button
           id="btn-reset-view"
           onClick={handleResetRotation}
-          className="px-2 py-1 bg-black/80 backdrop-blur border border-white/10 text-white/60 hover:text-white rounded hover:bg-neutral-900 active:scale-95 transition-all shadow-md flex items-center gap-1 text-[9px] uppercase font-bold tracking-widest font-mono"
+          className="px-2 py-1 bg-black/80 backdrop-blur border border-white/10 text-white/60 hover:text-white rounded hover:bg-neutral-900 active:scale-95 transition-all shadow-md flex items-center gap-1 text-[9px] uppercase font-bold tracking-widest font-mono cursor-pointer"
           title="Reset View Rotation"
         >
           <RefreshCw size={10} />
           Reset Rotation
+        </button>
+
+        {/* Dynamic Hover Color Interaction Toggle */}
+        <button
+          id="btn-toggle-hover"
+          onClick={() => {
+            if (onChange) {
+              onChange((prev) => ({
+                ...prev,
+                halftone: {
+                  ...prev.halftone,
+                  hoverColorEnabled: prev.halftone.hoverColorEnabled === false ? true : false
+                }
+              }));
+            }
+          }}
+          className={`px-2 py-1 bg-black/85 backdrop-blur border rounded active:scale-95 transition-all shadow-md flex items-center gap-1.5 text-[9px] uppercase font-bold tracking-widest font-mono cursor-pointer ${
+            settings.halftone.hoverColorEnabled !== false 
+              ? "border-amber-500/55 text-amber-400 font-black shadow-[0_0_8px_rgba(245,158,11,0.15)] bg-amber-500/5 hover:bg-amber-500/10" 
+              : "border-white/10 text-white/40 hover:text-white/70 hover:bg-white/5"
+          }`}
+          title="Toggle Hover Interaction Color Shift"
+        >
+          <MousePointer size={11} className={settings.halftone.hoverColorEnabled !== false ? "animate-pulse text-amber-400" : "text-white/40"} />
+          Hover Color: {settings.halftone.hoverColorEnabled !== false ? "ON" : "OFF"}
         </button>
       </div>
 

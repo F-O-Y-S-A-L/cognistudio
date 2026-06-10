@@ -224,7 +224,7 @@ export default function App() {
     else if (newPage === 'cell') routeName = 'cell';
 
     // Set the hash without triggering an infinite handleHashChange loop reload
-    window.location.hash = `${routeName}`;
+    window.location.hash = `/${routeName}`;
     setActivePage(newPage);
   };
 
