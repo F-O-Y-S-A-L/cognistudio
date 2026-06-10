@@ -581,8 +581,19 @@ export default function ControlPanel({
           setSuggestionsError(null);
         }
       } else {
-        const errData = await response.json().catch(() => ({}));
-        setSuggestionsError(errData.error || "Gemini API key is not configured.");
+        let errMsg = `Server Error (${response.status})`;
+        try {
+          if (response.headers.get("content-type")?.includes("application/json")) {
+            const errData = await response.json();
+            errMsg = errData.error || errMsg;
+          } else {
+            const responseText = await response.text();
+            errMsg = `HTTP ${response.status} (${response.statusText || 'Error'}). Response is not JSON. Vercel deployment API function might have crashed or failed to boot. Check your Vercel deployment logs. Details: ${responseText.substring(0, 100)}`;
+          }
+        } catch (e) {
+          errMsg = `HTTP ${response.status}: Failed to parse server response`;
+        }
+        setSuggestionsError(errMsg);
       }
     } catch (err: any) {
       console.warn("Faced issue loading suggestions from Gemini:", err);
@@ -2070,25 +2081,41 @@ export default function StandaloneHalftoneViewer() {
                           body: JSON.stringify({ prompt: aiPrompt }),
                         });
                         console.log("[DEBUG:Client] Response status:", res.status, "ok:", res.ok);
-                        const data = await res.json();
-                        console.log("[DEBUG:Client] Data:", data);
-                        if (res.ok && data.settings) {
-                          onChange((prev) => {
-                            const newSettings = { ...prev, ...data.settings };
-                            if (data.settings.lighting) newSettings.lighting = { ...prev.lighting, ...data.settings.lighting };
-                            if (data.settings.material) newSettings.material = { ...prev.material, ...data.settings.material };
-                            if (data.settings.halftone) newSettings.halftone = { ...prev.halftone, ...data.settings.halftone };
-                            if (data.settings.background) newSettings.background = { ...prev.background, ...data.settings.background };
-                            if (data.settings.animation) {
-                              newSettings.animation = { ...prev.animation, ...data.settings.animation };
-                            } else {
-                              newSettings.animation = { ...prev.animation };
-                            }
-                            return newSettings;
-                          });
-                          setAiPrompt('');
+                        let data: any = {};
+                        if (res.ok) {
+                          data = await res.json();
+                          if (data.settings) {
+                            onChange((prev) => {
+                              const newSettings = { ...prev, ...data.settings };
+                              if (data.settings.lighting) newSettings.lighting = { ...prev.lighting, ...data.settings.lighting };
+                              if (data.settings.material) newSettings.material = { ...prev.material, ...data.settings.material };
+                              if (data.settings.halftone) newSettings.halftone = { ...prev.halftone, ...data.settings.halftone };
+                              if (data.settings.background) newSettings.background = { ...prev.background, ...data.settings.background };
+                              if (data.settings.animation) {
+                                newSettings.animation = { ...prev.animation, ...data.settings.animation };
+                              } else {
+                                newSettings.animation = { ...prev.animation };
+                              }
+                              return newSettings;
+                            });
+                            setAiPrompt('');
+                          } else {
+                            setAiError('Failed to generate design: settings object is missing');
+                          }
                         } else {
-                          setAiError(data.error || 'Failed to generate design');
+                          let errMsg = `Server Error (${res.status})`;
+                          try {
+                            if (res.headers.get("content-type")?.includes("application/json")) {
+                              data = await res.json();
+                              errMsg = data.error || errMsg;
+                            } else {
+                              const resText = await res.text();
+                              errMsg = `HTTP ${res.status} (${res.statusText || 'Error'}). Vercel function likely crashed. Details: ${resText.substring(0, 100)}`;
+                            }
+                          } catch (e) {
+                            errMsg = `HTTP ${res.status}: Failed to parse server response`;
+                          }
+                          setAiError(errMsg);
                         }
                       } catch (err: any) {
                         setAiError(err.message || 'An error occurred while generating the design.');
