@@ -813,3 +813,5 @@ Make sure values are highly artistic, vibrant, and coordinated:
 // Mount the API Router under multiple namespaces to ensure 100% path resolution on Vercel
 app.use("/api", apiRouter);
 app.use("/", apiRouter);
+
+export default app;
