@@ -262,14 +262,13 @@ function generateProceduralConcept() {
   };
 }
 
-async function startServer() {
-  console.log("[DEBUG] Current working directory:", process.cwd());
-  console.log("[DEBUG] Env keys after loading:", Object.keys(process.env).filter(k => k.includes('GEMINI')));
-  
-  const app = express();
-  const PORT = 3000;
+export const app = express();
+const PORT = 3000;
 
-  app.use(express.json());
+console.log("[DEBUG] Current working directory:", process.cwd());
+console.log("[DEBUG] Env keys after loading:", Object.keys(process.env).filter(k => k.includes('GEMINI')));
+
+app.use(express.json());
   
   // Safe debugging route to help the user diagnose environment variables
   app.get("/api/debug-env", (req, res) => {
@@ -804,11 +803,14 @@ Make sure values are highly artistic, vibrant, and coordinated:
 
   // Vite middleware setup
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
+    createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
+    }).then((vite) => {
+      app.use(vite.middlewares);
+    }).catch(err => {
+      console.error("Failed to start Vite server:", err);
     });
-    app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -817,9 +819,8 @@ Make sure values are highly artistic, vibrant, and coordinated:
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
-
-startServer();
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  }
