@@ -6,43 +6,8 @@ import fs from "fs";
 
 console.log("[DEBUG] EXECUTING CLEAN EXPRESS APP ROUTER");
 
-// Fallback to manual loading if dotenv/config didn't pick it up
-if (!process.env.GEMINI_API_KEY) {
-  try {
-    const envPath = path.resolve(process.cwd(), '.env');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf-8');
-      content.split(/\r?\n/).forEach(line => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) return;
-        
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx === -1) return;
-        
-        const key = trimmed.substring(0, eqIdx).trim();
-        let value = trimmed.substring(eqIdx + 1).trim();
-        
-        // Remove trailing comment
-        const hashIdx = value.indexOf('#');
-        if (hashIdx !== -1) {
-          value = value.substring(0, hashIdx).trim();
-        }
-        
-        // Strip single/double quotes around value
-        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-          value = value.substring(1, value.length - 1).trim();
-        }
-        
-        if (key && !process.env[key]) {
-          process.env[key] = value;
-        }
-      });
-      console.log("[DEBUG] Manually loaded .env in app.ts. GEMINI_API_KEY exists:", !!process.env.GEMINI_API_KEY);
-    }
-  } catch (e) {
-    console.error("[DEBUG] Failed to manually load .env in app.ts", e);
-  }
-}
+// REMOVED manual .env file loading logic. 
+// Relying strictly on process.env injected by Vercel/Platform.
 
 const generateFallbackPreset = (pr: string) => {
   const normalized = pr.toLowerCase();
