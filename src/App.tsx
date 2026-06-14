@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useState, useRef, useReducer } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AppSettings, INITIAL_SETTINGS } from './types';
 import PreviewHeader from './components/PreviewHeader';
 import CanvasViewport from './components/CanvasViewport';
@@ -12,7 +13,10 @@ import MosaicStudio from './components/MosaicStudio';
 import ServeoNetwork from './components/ServeoNetwork';
 import SilkGenerator from './components/SilkGenerator';
 import CellGenerator from './components/CellGenerator';
-import { Sparkles, Layers } from 'lucide-react';
+import AboutPage from './components/AboutPage';
+import DocsPage from './components/DocsPage';
+import AIHomePage from './components/AIHomePage';
+import { Sparkles, Layers, Terminal, Shield, HelpCircle, Activity } from 'lucide-react';
 
 const HISTORY_LIMIT = 20;
 
@@ -121,12 +125,44 @@ const mergeSettings = (target: AppSettings, source: any): AppSettings => {
 };
 
 export default function App() {
-  const [activePage, setActivePage] = useState<'main' | 'gradient' | 'ribbons' | 'silk' | 'cell'>('main');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Unified routing state mapping
+  const activeView: 'home' | 'studio' | 'about' | 'docs' = 
+    (location.pathname === '/' || location.pathname === '/home') ? 'home' :
+    location.pathname === '/about' ? 'about' : 
+    location.pathname === '/docs' ? 'docs' : 'studio';
+
+  const activePage: 'main' | 'gradient' | 'ribbons' | 'silk' | 'cell' = 
+    (location.pathname === '/mosaic' || location.pathname === '/gradient') ? 'gradient' :
+    (location.pathname === '/network' || location.pathname === '/ribbons') ? 'ribbons' :
+    location.pathname === '/silk' ? 'silk' :
+    location.pathname === '/cell' ? 'cell' : 'main';
+
   const [state, dispatch] = useReducer(appReducer, {
     past: [],
     present: INITIAL_SETTINGS,
     future: [],
   });
+  // --- Keyboard Shortcuts ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          dispatch({ type: 'REDO' });
+          showToast('Redo completed');
+        } else {
+          dispatch({ type: 'UNDO' });
+          showToast('Undo completed');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const settings = state.present;
   const setSettings = (newSettings: AppSettings | ((prev: AppSettings) => AppSettings)) => {
     if (typeof newSettings === 'function') {
@@ -154,68 +190,37 @@ export default function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedBlobsRef = useRef<Blob[]>([]);
 
-  // Parse location hash dynamically to update page state and load settings
-  const parseHash = () => {
-    const hash = window.location.hash;
-    if (!hash) return { page: 'main' as const, base64: null };
-
-    // Clear the leading '#' and any leading '/' for unified routing (e.g., #/silk or #silk)
-    const cleanHash = hash.replace(/^#\/?/, '');
-    if (!cleanHash) return { page: 'main' as const, base64: null };
-
-    let pagePart = cleanHash;
-    let base64Part: string | null = null;
-
-    if (cleanHash.includes('?c=')) {
-      const parts = cleanHash.split('?c=');
-      pagePart = parts[0];
-      base64Part = parts[1];
-    } else if (cleanHash.includes('/')) {
-      const parts = cleanHash.split('/');
-      pagePart = parts[0];
-      base64Part = parts[1];
-    } else if (cleanHash.length > 50) {
-      // Legacy compatibility: direct base64 configuration as the hash
-      pagePart = 'main';
-      base64Part = cleanHash;
-    }
-
-    // Map URL endpoints with local pages
-    let page: 'main' | 'gradient' | 'ribbons' | 'silk' | 'cell' = 'main';
-    if (pagePart === 'mosaic' || pagePart === 'gradient') {
-      page = 'gradient';
-    } else if (pagePart === 'network' || pagePart === 'ribbons') {
-      page = 'ribbons';
-    } else if (pagePart === 'silk') {
-      page = 'silk';
-    } else if (pagePart === 'cell') {
-      page = 'cell';
-    }
-
-    return { page, base64: base64Part };
-  };
-
-  // Synchronize on mount and browser navigation history keys (back/forward)
+  // Synchronize on mount and anytime routing/location credentials update
   useEffect(() => {
-    const handleHashChange = () => {
-      const { page, base64 } = parseHash();
-      setActivePage(page);
-      if (base64) {
-        const decoded = decodeSettingsFromBase64(base64);
-        if (decoded) {
-          setSettings((prev) => mergeSettings(prev, decoded));
-        }
+    // 1. Check search parameter 'c'
+    const queryParams = new URLSearchParams(location.search);
+    const base64Query = queryParams.get('c');
+
+    // 2. Check hash parameters fallback
+    let base64Hash = null;
+    const hash = location.hash || window.location.hash;
+    if (hash && hash.includes('?c=')) {
+      base64Hash = hash.split('?c=')[1];
+    } else if (hash && hash.includes('/')) {
+      const parts = hash.split('/');
+      const lastPart = parts[parts.length - 1];
+      if (lastPart && lastPart.length > 50) {
+        base64Hash = lastPart;
       }
-    };
+    } else if (hash && hash.length > 50) {
+      base64Hash = hash.replace(/^#/, '');
+    }
 
-    // Initialize on first load
-    handleHashChange();
+    const targetBase64 = base64Query || base64Hash;
+    if (targetBase64) {
+      const decoded = decodeSettingsFromBase64(targetBase64);
+      if (decoded) {
+        setSettings((prev) => mergeSettings(prev, decoded));
+      }
+    }
+  }, [location.pathname, location.search, location.hash]);
 
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
-
-  // Update URL Hash and load the selected page
+  // Update Router Path and load the selected laboratory screen
   const handlePageChange = (newPage: 'main' | 'gradient' | 'ribbons' | 'silk' | 'cell') => {
     let routeName = 'source';
     if (newPage === 'gradient') routeName = 'mosaic';
@@ -223,9 +228,11 @@ export default function App() {
     else if (newPage === 'silk') routeName = 'silk';
     else if (newPage === 'cell') routeName = 'cell';
 
-    // Set the hash without triggering an infinite handleHashChange loop reload
-    window.location.hash = `/${routeName}`;
-    setActivePage(newPage);
+    // Map navigate trigger retaining any current query parameters
+    navigate({
+      pathname: `/${routeName}`,
+      search: location.search
+    });
   };
 
   const showToast = (message: string) => {
@@ -361,94 +368,152 @@ export default function App() {
 
       {/* Primary Header Section */}
       <PreviewHeader 
-        onUndo={() => dispatch({ type: 'UNDO' })}
-        onRedo={() => dispatch({ type: 'REDO' })}
+        onUndo={() => { dispatch({ type: 'UNDO' }); showToast('Undo completed'); }}
+        onRedo={() => { dispatch({ type: 'REDO' }); showToast('Redo completed'); }}
         settings={settings}
         onChange={setSettings}
         activePage={activePage}
         setActivePage={handlePageChange}
+        onOpenAbout={() => navigate('/about')}
+        onOpenDocs={() => navigate('/docs')}
+        onReset={() => {
+          setSettings(INITIAL_SETTINGS);
+          showToast('Success: All parameters reset to factory standards!');
+        }}
+        activeView={activeView}
+        onGoHome={() => navigate('/')}
       />
 
-      {/* Main Grid: Canvas + Sidebar or Ribbon Studio */}
-      {activePage === 'cell' ? (
-        <div className="flex-1 p-2 md:p-4 lg:p-6 overflow-y-auto lg:overflow-hidden min-h-0 flex flex-col bg-[#020202]">
-          <CellGenerator />
-        </div>
-      ) : activePage === 'silk' ? (
-        <div className="flex-1 p-2 md:p-4 lg:p-6 overflow-y-auto lg:overflow-hidden min-h-0 flex flex-col bg-[#020202]">
-          <SilkGenerator />
-        </div>
-      ) : activePage === 'ribbons' ? (
-        <div className="flex-grow flex-1 p-2 md:p-4 lg:p-6 overflow-y-auto lg:overflow-hidden min-h-0 flex flex-col bg-[#020202]">
-          <ServeoNetwork />
-        </div>
-      ) : activePage === 'gradient' ? (
-        <div className="flex-1 p-2 md:p-4 lg:p-6 overflow-y-auto lg:overflow-hidden min-h-0 flex flex-col bg-[#050505]">
-          <MosaicStudio />
-        </div>
-      ) : (
-        <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden min-h-0">
-          
-          {/* Core Canvas Viewport */}
-          <main className="flex-1 p-2 md:p-4 lg:p-6 flex flex-col gap-4 relative min-w-0 min-h-100 lg:min-h-0 shrink-0 lg:shrink">
-            <div className="flex-1 relative rounded overflow-hidden shadow-2xl">
-              <CanvasViewport
-                settings={settings}
-                onChange={setSettings}
-                isHovered={isHovered}
-                onHoverChange={setIsHovered}
-                viewportRef={viewportRef}
-                activePage={activePage}
-              />
-            </div>
-
-            {/* Quick-stats and feature insights panel (Clean Margin Labels) */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-[#080808] border border-white/10 rounded text-[11px] text-white/60 font-mono tracking-wide">
-              <div className="flex items-center gap-2">
-                <Layers size={13} className="text-indigo-400" />
-                <span className="uppercase text-white/30 font-bold text-[10px] tracking-wider">Active Mode:</span>
-                <span className="text-white uppercase bg-white/5 px-2 py-0.5 rounded border border-white/5 text-[10px] font-bold">
-                  Halftone Source
-                </span>
+      {/* Main Grid: Canvas + Sidebar, Ribbon Studio, or Full-screen Routed Pages */}
+      <div className="flex-grow flex-1 min-h-0 relative flex flex-col overflow-hidden">
+        {activeView === 'home' ? (
+          <AIHomePage onEnterStudio={handlePageChange} />
+        ) : activeView === 'about' ? (
+          <div className="flex-grow flex-1 overflow-hidden flex flex-col bg-[#050505] min-h-0">
+            <AboutPage />
+          </div>
+        ) : activeView === 'docs' ? (
+          <div className="flex-grow flex-1 overflow-hidden flex flex-col bg-[#050505] min-h-0">
+            <DocsPage />
+          </div>
+        ) : activePage === 'cell' ? (
+          <div className="flex-grow flex-1 p-2 md:p-4 lg:p-6 overflow-y-auto lg:overflow-hidden min-h-0 flex flex-col bg-[#020202]">
+            <CellGenerator />
+          </div>
+        ) : activePage === 'silk' ? (
+          <div className="flex-grow flex-1 p-2 md:p-4 lg:p-6 overflow-y-auto lg:overflow-hidden min-h-0 flex flex-col bg-[#020202]">
+            <SilkGenerator />
+          </div>
+        ) : activePage === 'ribbons' ? (
+          <div className="flex-grow flex-1 p-2 md:p-4 lg:p-6 overflow-y-auto lg:overflow-hidden min-h-0 flex flex-col bg-[#020202]">
+            <ServeoNetwork />
+          </div>
+        ) : activePage === 'gradient' ? (
+          <div className="flex-grow flex-1 p-2 md:p-4 lg:p-6 overflow-y-auto lg:overflow-hidden min-h-0 flex flex-col bg-[#050505]">
+            <MosaicStudio />
+          </div>
+        ) : (
+          <div className="flex-grow flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden min-h-0">
+            
+            {/* Core Canvas Viewport */}
+            <main className="flex-grow flex-1 p-2 md:p-4 lg:p-6 flex flex-col gap-4 relative min-w-0 min-h-[350px] lg:min-h-0 shrink-0 lg:shrink">
+              <div className="flex-grow flex-1 relative rounded overflow-hidden shadow-2xl">
+                <CanvasViewport
+                  settings={settings}
+                  onChange={setSettings}
+                  isHovered={isHovered}
+                  onHoverChange={setIsHovered}
+                  viewportRef={viewportRef}
+                  activePage={activePage}
+                />
               </div>
-              
-              <div className="flex items-center gap-4 flex-wrap w-full sm:w-auto sm:justify-end">
-                <div className="flex items-center gap-1.5 font-mono">
-                  <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">DENSITY:</span>
-                  <span className="text-indigo-400 font-bold">{settings.halftone.scale}</span>
-                  <span className="text-xs text-white/20">•</span>
-                  <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">FUZZ:</span>
-                  <span className="text-indigo-400 font-bold">{settings.halftone.power}</span>
-                  <span className="text-xs text-white/20">•</span>
-                  <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">COMPRESSION:</span>
-                  <span className="text-indigo-400 font-bold">{settings.halftone.width}</span>
+
+              {/* Quick-stats and feature insights panel (Clean Margin Labels) */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-[#080808] border border-white/10 rounded text-[11px] text-white/60 font-mono tracking-wide">
+                <div className="flex items-center gap-2">
+                  <Layers size={13} className="text-indigo-400" />
+                  <span className="uppercase text-white/30 font-bold text-[10px] tracking-wider">Active Mode:</span>
+                  <span className="text-white uppercase bg-white/5 px-2 py-0.5 rounded border border-white/5 text-[10px] font-bold">
+                    Halftone Source
+                  </span>
                 </div>
                 
+                <div className="flex items-center gap-4 flex-wrap w-full sm:w-auto sm:justify-end">
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">DENSITY:</span>
+                    <span className="text-indigo-400 font-bold">{settings.halftone.scale}</span>
+                    <span className="text-xs text-white/20">•</span>
+                    <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">FUZZ:</span>
+                    <span className="text-indigo-400 font-bold">{settings.halftone.power}</span>
+                    <span className="text-xs text-white/20">•</span>
+                    <span className="text-white/30 font-bold uppercase text-[9px] tracking-wider">COMPRESSION:</span>
+                    <span className="text-indigo-400 font-bold">{settings.halftone.width}</span>
+                  </div>
+                  
+                </div>
               </div>
-            </div>
-          </main>
+            </main>
 
-          {/* Sidebar Controls Area */}
-          <div className="w-full lg:w-[400px] shrink-0 bg-[#0a0a0a] border-l border-white/10 h-full overflow-hidden">
-            <ControlPanel 
-              settings={settings} 
-              onChange={setSettings} 
-              onCopyLink={handleCopyLink}
-              onExportPNG={handleExportPNG}
-              onExportWebM={handleToggleRecording}
-              recordingStatus={recordingStatus}
-              videoQuality={videoQuality}
-              onVideoQualityChange={setVideoQuality}
-              videoDuration={videoDuration}
-              onVideoDurationChange={setVideoDuration}
-              onReset={() => {
-                setSettings(INITIAL_SETTINGS);
-                showToast('Success: All parameters reset to factory standards!');
-              }}
-            />
+            {/* Sidebar Controls Area */}
+            <div className="w-full lg:w-[400px] shrink-0 bg-[#0a0a0a] border-l border-white/10 h-full overflow-hidden">
+              <ControlPanel 
+                settings={settings} 
+                onChange={setSettings} 
+                onCopyLink={handleCopyLink}
+                onExportPNG={handleExportPNG}
+                onExportWebM={handleToggleRecording}
+                recordingStatus={recordingStatus}
+                videoQuality={videoQuality}
+                onVideoQualityChange={setVideoQuality}
+                videoDuration={videoDuration}
+                onVideoDurationChange={setVideoDuration}
+                onReset={() => {
+                  setSettings(INITIAL_SETTINGS);
+                  showToast('Success: All parameters reset to factory standards!');
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Immersive Dashboard Status Footer */}
+      <footer className="w-full bg-[#060606] border-t border-white/5 py-3 px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-[10px] text-white/40 font-mono tracking-wider shrink-0 z-20">
+        <div className="flex items-center gap-2.5">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="uppercase font-semibold">Laboratory Status: Autonomous WebGL Tensor Sync Online</span>
+        </div>
+        
+        <div className="flex items-center gap-5">
+          <div className="hidden lg:flex items-center gap-1">
+            <span className="text-white/20">ENGINE:</span>
+            <span className="text-indigo-400 font-bold uppercase">
+              {activeView === 'about' ? 'ABOUT INTEL' : activeView === 'docs' ? 'DOCS INDEX' : activePage === 'cell' ? 'Voronoi Physics 2D' : activePage === 'silk' ? '3D Light Ribbon Raster' : activePage === 'ribbons' ? 'Physics Web Engine' : activePage === 'gradient' ? 'Vortex Flow Fluid' : 'HalfTone Matrix'}
+            </span>
+          </div>
+          <span className="hidden sm:inline text-white/10">|</span>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => navigate('/about')}
+              className="hover:text-white text-white/70 transition-colors cursor-pointer flex items-center gap-1 uppercase font-bold text-[10px]"
+            >
+              <Terminal size={11} className="text-indigo-400" />
+              About Concept
+            </button>
+            <span className="text-white/10">•</span>
+            <button 
+              onClick={() => navigate('/docs')}
+              className="hover:text-white text-white/70 transition-colors cursor-pointer flex items-center gap-1 uppercase font-bold text-[10px]"
+            >
+              <HelpCircle size={11} className="text-yellow-400 animate-pulse" />
+              Interactive Manual
+            </button>
           </div>
         </div>
-      )}
+      </footer>
 
     </div>
   );

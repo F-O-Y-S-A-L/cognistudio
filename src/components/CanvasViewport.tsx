@@ -91,6 +91,11 @@ export default function CanvasViewport({
   const geometryRequestIdRef = useRef(0);
   const particlesRef = useRef<THREE.Points | null>(null);
 
+  // Video element and video texture caching refs to prevent recreating DOM elements on every slider update
+  const videoElRef = useRef<HTMLVideoElement | null>(null);
+  const videoTextureRef = useRef<THREE.VideoTexture | null>(null);
+  const previousVideoSrcRef = useRef<string | null>(null);
+
   // Exposed API
   useEffect(() => {
     if (viewportRef) {
@@ -559,14 +564,42 @@ export default function CanvasViewport({
     let loadedTexture: THREE.Texture | null = null;
     
     if (sourceMode === 'video' && settings.videoSrc) {
-       const video = document.createElement('video');
-       video.src = settings.videoSrc;
-       video.loop = true;
-       video.muted = true;
-       video.play();
-       loadedTexture = new THREE.VideoTexture(video);
-    } else if (imageSrc) {
-       loadedTexture = await loadTextureAsync(imageSrc);
+       if (previousVideoSrcRef.current !== settings.videoSrc || !videoElRef.current || !videoTextureRef.current) {
+          // Dispose of old references safely
+          if (videoTextureRef.current) {
+             videoTextureRef.current.dispose();
+          }
+          if (videoElRef.current) {
+             videoElRef.current.pause();
+             videoElRef.current.src = "";
+          }
+          
+          const video = document.createElement('video');
+          video.src = settings.videoSrc;
+          video.loop = true;
+          video.muted = true;
+          video.playsInline = true;
+          video.crossOrigin = 'anonymous';
+          video.play().catch(err => console.log("video play failed:", err));
+          
+          videoElRef.current = video;
+          videoTextureRef.current = new THREE.VideoTexture(video);
+          previousVideoSrcRef.current = settings.videoSrc;
+       } else {
+          // Keep active playing state warm
+          if (videoElRef.current && videoElRef.current.paused) {
+             videoElRef.current.play().catch(() => {});
+          }
+       }
+       loadedTexture = videoTextureRef.current;
+    } else {
+       // Stop the background video to save resources
+       if (videoElRef.current && !videoElRef.current.paused) {
+          videoElRef.current.pause();
+       }
+       if (imageSrc) {
+          loadedTexture = await loadTextureAsync(imageSrc);
+       }
     }
 
     // If a newer geometry request has started in the meantime, abort and clean up loaded texture!
@@ -1084,6 +1117,28 @@ export default function CanvasViewport({
            geometry.computeVertexNormals();
            break;
         }
+        case 'torus-knot':
+          geometry = new THREE.TorusKnotGeometry(0.8, 0.25, 
+            Math.max(128, 64 * settings.shapeModifiers.detailLevel), 
+            Math.max(32, 16 * settings.shapeModifiers.detailLevel)
+          );
+          break;
+        case 'cone':
+          geometry = new THREE.ConeGeometry(1.0, 2.0, 
+            Math.max(32, 16 * settings.shapeModifiers.detailLevel),
+            Math.max(1, settings.shapeModifiers.detailLevel)
+          );
+          break;
+        case 'dodecahedron':
+          geometry = new THREE.DodecahedronGeometry(1.0, 
+            Math.max(0, Math.min(2, settings.shapeModifiers.detailLevel))
+          );
+          break;
+        case 'tetrahedron':
+          geometry = new THREE.TetrahedronGeometry(1.2, 
+            Math.max(0, Math.min(2, settings.shapeModifiers.detailLevel))
+          );
+          break;
         case 'gears': {
           isCompositeGroup = true;
           const makeGear = () => {
@@ -2114,7 +2169,7 @@ export default function CanvasViewport({
               if (uTransparent) {
                 gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
               } else {
-                gl_FragColor = vec4(uGradientEnabled ? getGradient(vUv) : uBgColor, 1.0);
+                gl_FragColor = vec4(uBgColor, 1.0);
               }
             } else {
               gl_FragColor = vec4(sceneColor.rgb, sceneColor.a);
@@ -2129,7 +2184,7 @@ export default function CanvasViewport({
             if (uTransparent) {
               gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
             } else {
-              gl_FragColor = vec4(uGradientEnabled ? getGradient(vUv) : uBgColor, 1.0);
+              gl_FragColor = vec4(uBgColor, 1.0);
             }
             return;
           }
@@ -2673,6 +2728,18 @@ export default function CanvasViewport({
         envTextureRef.current.dispose();
       }
       
+      // Clean up cached video references safely
+      if (videoTextureRef.current) {
+        videoTextureRef.current.dispose();
+        videoTextureRef.current = null;
+      }
+      if (videoElRef.current) {
+        videoElRef.current.pause();
+        videoElRef.current.src = "";
+        videoElRef.current = null;
+      }
+      previousVideoSrcRef.current = null;
+      
       // Clean up geometries
       mainScene.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
@@ -2778,9 +2845,6 @@ export default function CanvasViewport({
       dragMomentumVelocityRef.current.y = deltaY * sens * 1.5;
     }
 
-    // Limit X axis rotation to prevent flipping upside down
-    targetRotationRef.current.x = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, targetRotationRef.current.x));
-
     if (settingsRef.current.animation.dragFlowEnabled) {
       dragFlowVelocityRef.current.x += deltaX * 0.003;
       dragFlowVelocityRef.current.y -= deltaY * 0.003; // Note: Screen coordinate space is inverted compared to shader space
@@ -2798,11 +2862,13 @@ export default function CanvasViewport({
     e.currentTarget.releasePointerCapture(e.pointerId);
 
     // If spring return is enabled, spring back to the default coordinates upon drag release
+    /*
     if (settingsRef.current.animation.springReturnEnabled) {
       if (!settingsRef.current.animation.autoRotateEnabled && !settingsRef.current.animation.rotateEnabled) {
         targetRotationRef.current = { x: 0.3, y: 0.4 };
       }
     }
+    */
   };
 
   const handleResetRotation = () => {

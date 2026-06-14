@@ -6,8 +6,8 @@
     
     <!-- Title and Core SEO Metadata -->
     <title>CogniStudio - Digital Art & 3D Interactive Generative Design Studio</title>
-    <link rel="icon" type="image/svg+xml" href="/icon-unique-4.svg" />
-    <link rel="apple-touch-icon" href="/ficon-unique-4.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
     <meta name="description" content="An interactive web-based 3D generative art studio and creative canvas. Create beautiful real-time 3D fluid lines, pixel-perfect dot mosaics, neural network visualizations, flow fields, and organic simulations directly in your browser." />
     <meta name="keywords" content="3d, 3d art, 3d design, 3d interactive website, 3d generative art, 3d silk waves, generative art, mosaic maker, pixel dot studio, pattern design, generative graphics, neural network visualization, 3d canvas editor, digital creative studio, webgl interactive art, interactive liquid flow, abstract physics engine, custom particle simulations, 3d live wallpapers, web design tools, 3d background builder, 3d background, 3d interactive page, interactive 3d graphics, visualizer 3d, generative 3d, web gl 3d, creative web design 3d" />
     <meta name="author" content="CogniStudio" />
@@ -34,7 +34,7 @@
         "@context": "https://schema.org",
         "@type": "WebApplication",
         "name": "CogniStudio",
-        "url": "https://cognistudio.vercel.app/",
+        "url": "https://cognistudio.com",
         "genre": "Digital Art Utility / 3D Generative Design Tool",
         "applicationCategory": "DesignApplication",
         "operatingSystem": "All (Web-Based Browser App)",
@@ -54,6 +54,9 @@
     </script>
   </head>
   <body>
+    <script>
+      window.process = { env: {} };
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppSettings, SourceMode, INITIAL_SETTINGS } from '../types';
+import { CONCEPTS_LIBRARY } from '../data/conceptsData';
 import { 
   Eye, 
   Lightbulb, 
@@ -40,6 +41,8 @@ interface ControlPanelProps {
   onExportWebM?: () => void;
   recordingStatus?: 'idle' | 'recording' | 'finished';
   onReset?: () => void;
+  onResetRotation?: () => void;
+  onResetNetwork?: () => void;
   videoQuality?: '720' | '1080' | '1440' | '2160';
   onVideoQualityChange?: (val: '720' | '1080' | '1440' | '2160') => void;
   videoDuration?: number;
@@ -54,6 +57,8 @@ export default function ControlPanel({
   onExportWebM,
   recordingStatus = 'idle',
   onReset,
+  onResetRotation,
+  onResetNetwork,
   videoQuality = '1080',
   onVideoQualityChange,
   videoDuration = 20,
@@ -552,55 +557,41 @@ export default function ControlPanel({
   const [codeTab, setCodeTab] = useState<'react' | 'html'>('react');
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // AI Design Co-Pilot states
+  // Design Co-Pilot states (Offline smart preset engine)
   const [aiPrompt, setAiPrompt] = useState('');
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [importCode, setImportCode] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
 
-  // AI idea suggestions from Gemini
-  const [suggestions, setSuggestions] = useState<{ name: string; prompt: string }[]>([]);
+  // Creative suggestions from internal high-fidelity archive (50 designs repository)
+  const [suggestions, setSuggestions] = useState<{ name: string; prompt: string; settings?: any }[]>([]);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
 
-  const rotateSuggestions = async () => {
+  const rotateSuggestions = () => {
     if (isSuggestionsLoading) return;
     setIsSuggestionsLoading(true);
     setSuggestionsError(null);
-    try {
-      const response = await fetch("/api/gemini/suggest-concepts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store"
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data && Array.isArray(data.concepts) && data.concepts.length > 0) {
-          setSuggestions(data.concepts);
-          setSuggestionsError(null);
-        }
-      } else {
-        let errMsg = `Server Error (${response.status})`;
-        try {
-          if (response.headers.get("content-type")?.includes("application/json")) {
-            const errData = await response.json();
-            errMsg = errData.error || errMsg;
-          } else {
-            const responseText = await response.text();
-            errMsg = `HTTP ${response.status} (${response.statusText || 'Error'}). Response is not JSON. Vercel deployment API function might have crashed or failed to boot. Check your Vercel deployment logs. Details: ${responseText.substring(0, 100)}`;
-          }
-        } catch (e) {
-          errMsg = `HTTP ${response.status}: Failed to parse server response`;
-        }
-        setSuggestionsError(errMsg);
+    
+    // Simulate a brief premium loading animation to reinforce the design compilation feeling
+    setTimeout(() => {
+      try {
+        // Select 5 random unique concepts from CONCEPTS_LIBRARY
+        const shuffled = [...CONCEPTS_LIBRARY].sort(() => 0.5 - Math.random());
+        const selected = shuffled.slice(0, 5).map(c => ({
+          name: c.name,
+          prompt: c.prompt,
+          settings: c.settings
+        }));
+        setSuggestions(selected);
+      } catch (err: any) {
+        console.error("Failed to select designs:", err);
+        setSuggestionsError("Failed to shuffle design lab.");
+      } finally {
+        setIsSuggestionsLoading(false);
       }
-    } catch (err: any) {
-      console.warn("Faced issue loading suggestions from Gemini:", err);
-      setSuggestionsError(err.message || "Failed to contact local server endpoint.");
-    } finally {
-      setIsSuggestionsLoading(false);
-    }
+    }, 180);
   };
 
   useEffect(() => {
@@ -1931,9 +1922,6 @@ export default function StandaloneHalftoneViewer() {
 
   const toggleSection = (sectionName: string) => {
     setOpenSection((prev) => (prev === sectionName ? '' : sectionName));
-    if (sectionName === 'source') {
-      updateNestedSetting('halftone', 'shape', 'none');
-    }
   };
 
   const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
@@ -2033,8 +2021,7 @@ export default function StandaloneHalftoneViewer() {
       {/* RENDER DYNAMIC INNER TABS */}
       {activeTab === 'design' && (
         <div className="flex flex-col animate-fade-in" id="design-tab-panel">
-          
-          {/* SECTION 0: AI DESIGN CO-PILOT */}
+          {/* SECTION 0: CREATIVE PRESETS LAB */}
           <div className="border-b border-zinc-900 bg-indigo-950/10" id="sect-ai-copilot">
             <button
               onClick={() => toggleSection('ai-copilot')}
@@ -2042,7 +2029,7 @@ export default function StandaloneHalftoneViewer() {
             >
               <div className="flex items-center gap-2.5">
                 <Sparkles size={13} className="text-indigo-400 animate-pulse" />
-                <span className="text-[10px] font-bold tracking-widest font-mono text-indigo-300 uppercase">0. AI DESIGN CO-PILOT</span>
+                <span className="text-[10px] font-bold tracking-widest font-mono text-indigo-300 uppercase">0. CREATIVE PRESETS LAB</span>
               </div>
               {openSection === 'ai-copilot' ? <ChevronUp size={11} className="text-zinc-500" /> : <ChevronDown size={11} className="text-zinc-500" />}
             </button>
@@ -2051,14 +2038,14 @@ export default function StandaloneHalftoneViewer() {
               <div className="px-5 pb-5 pt-1 flex flex-col gap-4">
                 {/* AI Prompter */}
                 <div className="flex flex-col gap-2">
-                  <span className="text-[8px] font-bold font-mono tracking-widest text-zinc-500 uppercase">Describe Your Dream Design</span>
+                  <span className="text-[8px] font-bold font-mono tracking-widest text-zinc-500 uppercase">Input Prompt or Search Styles</span>
                   <div className="relative">
                     <textarea
-                      placeholder="e.g., Warm solar eclipse with thin lines, Emerald digital retro matrix, Glass coin in neon sunset..."
+                      placeholder="e.g., Solar Flare, Cyber Grid, Sunset Synth, Ice Palace, Copper Forge..."
                       value={aiPrompt}
                       onChange={(e) => setAiPrompt(e.target.value)}
                       rows={3}
-                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-zinc-200 focus:outline-none focus:border-indigo-600 font-sans text-xs rounded-lg transition-colors placeholder:text-zinc-600 resize-none"
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-900 hover:border-zinc-850 text-zinc-200 focus:outline-none focus:border-indigo-600 font-sans text-xs rounded-lg transition-colors placeholder:text-zinc-650 resize-none"
                     />
                   </div>
 
@@ -2069,59 +2056,85 @@ export default function StandaloneHalftoneViewer() {
                   )}
 
                   <button
-                    onClick={async () => {
+                    onClick={() => {
                       if (!aiPrompt.trim()) return;
                       setIsAiGenerating(true);
                       setAiError(null);
-                      try {
-                        console.log("[DEBUG:Client] Requesting design for prompt:", aiPrompt);
-                        const res = await fetch('/api/gemini/generate-design', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ prompt: aiPrompt }),
-                        });
-                        console.log("[DEBUG:Client] Response status:", res.status, "ok:", res.ok);
-                        let data: any = {};
-                        if (res.ok) {
-                          data = await res.json();
-                          if (data.settings) {
+                      
+                      // Match user's input with the 50 concepts offline in standard sub-millisecond speeds
+                      setTimeout(() => {
+                        try {
+                          const query = aiPrompt.toLowerCase().trim();
+                          let bestMatch = CONCEPTS_LIBRARY[Math.floor(Math.random() * CONCEPTS_LIBRARY.length)];
+                          let maxScore = -1;
+                          
+                          for (const concept of CONCEPTS_LIBRARY) {
+                            let score = 0;
+                            const nameWords = concept.name.toLowerCase().split(/\s+/);
+                            const promptWords = concept.prompt.toLowerCase().split(/\s+/);
+                            
+                            // Match keywords in concept names (higher priority) or description prompts
+                            for (const word of nameWords) {
+                              if (word.length > 2 && query.includes(word)) score += 8;
+                            }
+                            for (const word of promptWords) {
+                              if (word.length > 2 && query.includes(word)) score += 3;
+                            }
+                            
+                            if (score > maxScore && score > 0) {
+                              maxScore = score;
+                              bestMatch = concept;
+                            }
+                          }
+                          
+                          if (bestMatch && bestMatch.settings) {
                             onChange((prev) => {
-                              const newSettings = { ...prev, ...data.settings };
-                              if (data.settings.lighting) newSettings.lighting = { ...prev.lighting, ...data.settings.lighting };
-                              if (data.settings.material) newSettings.material = { ...prev.material, ...data.settings.material };
-                              if (data.settings.halftone) newSettings.halftone = { ...prev.halftone, ...data.settings.halftone };
-                              if (data.settings.background) newSettings.background = { ...prev.background, ...data.settings.background };
-                              if (data.settings.animation) {
-                                newSettings.animation = { ...prev.animation, ...data.settings.animation };
-                              } else {
-                                newSettings.animation = { ...prev.animation };
-                              }
-                              return newSettings;
+                              const next = { ...prev } as any;
+                              const s = bestMatch.settings;
+                              if (s.sourceMode !== undefined) next.sourceMode = s.sourceMode;
+                              if (s.shapeKey !== undefined) next.shapeKey = s.shapeKey;
+                              if (s.distance !== undefined) next.distance = s.distance;
+                              
+                              if (s.material) next.material = { ...prev.material, ...s.material };
+                              if (s.halftone) next.halftone = { ...prev.halftone, ...s.halftone };
+                              if (s.background) next.background = { ...prev.background, ...s.background };
+                              if (s.shapeModifiers) next.shapeModifiers = { ...prev.shapeModifiers, ...s.shapeModifiers };
+                              if (s.gradient) next.gradient = { ...prev.gradient, ...s.gradient };
+                              if (s.animation) next.animation = { ...prev.animation, ...s.animation };
+                              return next as AppSettings;
                             });
+                            
+                            setSaveToast(`Success: Loaded custom configuration for "${bestMatch.name}"!`);
+                            setTimeout(() => setSaveToast(null), 3500);
                             setAiPrompt('');
                           } else {
-                            setAiError('Failed to generate design: settings object is missing');
+                            // Fallback to randomized high-fidelity compile if no keywords matched
+                            const randomConcept = CONCEPTS_LIBRARY[Math.floor(Math.random() * CONCEPTS_LIBRARY.length)];
+                            onChange((prev) => {
+                              const next = { ...prev } as any;
+                              const s = randomConcept.settings;
+                              if (s.sourceMode !== undefined) next.sourceMode = s.sourceMode;
+                              if (s.shapeKey !== undefined) next.shapeKey = s.shapeKey;
+                              if (s.distance !== undefined) next.distance = s.distance;
+                              
+                              if (s.material) next.material = { ...prev.material, ...s.material };
+                              if (s.halftone) next.halftone = { ...prev.halftone, ...s.halftone };
+                              if (s.background) next.background = { ...prev.background, ...s.background };
+                              if (s.shapeModifiers) next.shapeModifiers = { ...prev.shapeModifiers, ...s.shapeModifiers };
+                              if (s.gradient) next.gradient = { ...prev.gradient, ...s.gradient };
+                              if (s.animation) next.animation = { ...prev.animation, ...s.animation };
+                              return next as AppSettings;
+                            });
+                            setSaveToast(`Success: Compiled creative variation preset "${randomConcept.name}"!`);
+                            setTimeout(() => setSaveToast(null), 3500);
+                            setAiPrompt('');
                           }
-                        } else {
-                          let errMsg = `Server Error (${res.status})`;
-                          try {
-                            if (res.headers.get("content-type")?.includes("application/json")) {
-                              data = await res.json();
-                              errMsg = data.error || errMsg;
-                            } else {
-                              const resText = await res.text();
-                              errMsg = `HTTP ${res.status} (${res.statusText || 'Error'}). Vercel function likely crashed. Details: ${resText.substring(0, 100)}`;
-                            }
-                          } catch (e) {
-                            errMsg = `HTTP ${res.status}: Failed to parse server response`;
-                          }
-                          setAiError(errMsg);
+                        } catch (err: any) {
+                          setAiError("Analysis failure, fell back to default compile.");
+                        } finally {
+                          setIsAiGenerating(false);
                         }
-                      } catch (err: any) {
-                        setAiError(err.message || 'An error occurred while generating the design.');
-                      } finally {
-                        setIsAiGenerating(false);
-                      }
+                      }, 250); 
                     }}
                     disabled={isAiGenerating || !aiPrompt.trim()}
                     className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-850 disabled:text-zinc-500 text-white rounded-lg font-mono text-[10px] uppercase font-bold tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-lg active:scale-95 cursor-pointer"
@@ -2129,22 +2142,22 @@ export default function StandaloneHalftoneViewer() {
                     {isAiGenerating ? (
                       <>
                         <RefreshCw size={11} className="animate-spin text-white" />
-                        AI GENERATING PRESET...
+                        COMPILING PRESET PARAMETERS...
                       </>
                     ) : (
                       <>
                         <Sparkles size={11} />
-                        GENERATE INSTANTLY WITH AI
+                        GENERATE PRESET DIRECT FROM PROMPT
                       </>
                     )}
                   </button>
                 </div>
 
-                {/* AI Concept Inspirations with Auto Suggestions */}
+                {/* Concept Inspirations with Auto-Shuffle */}
                 <div className="flex flex-col gap-2.5 p-3 rounded-lg border border-indigo-950/40 bg-indigo-950/5 mt-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[8px] font-bold font-mono tracking-widest text-[#818cf8] uppercase">AI Concept Inspirations</span>
-                    <span className="text-[8px] font-bold font-mono text-zinc-550">GEMINI CO-PILOT</span>
+                    <span className="text-[8px] font-bold font-mono tracking-widest text-[#818cf8] uppercase">Concept Inspirations</span>
+                    <span className="text-[8px] font-mono font-bold text-zinc-500">OFFLINE PRESETS</span>
                   </div>
 
                   <button
@@ -2152,12 +2165,12 @@ export default function StandaloneHalftoneViewer() {
                     onClick={rotateSuggestions}
                     disabled={isSuggestionsLoading}
                     className="w-full py-2 px-3 bg-indigo-950/40 hover:bg-indigo-900/40 active:scale-98 border border-indigo-800/30 text-indigo-200 rounded-lg font-sans text-[11px] font-semibold tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:border-indigo-600/40"
-                    title="Click to generate 5 completely new generative ideas with AI"
+                    title="Click to load 5 random stylized designs from the offline library"
                   >
                     {isSuggestionsLoading ? (
                       <>
                         <RefreshCw size={11} className="animate-spin text-indigo-400" />
-                        <span>Generating suggestions... (Fetching from Gemini)</span>
+                        <span>Shuffling Concept Labs...</span>
                       </>
                     ) : (
                       <>
@@ -2168,26 +2181,7 @@ export default function StandaloneHalftoneViewer() {
                   </button>
 
                   <div className="flex flex-wrap gap-1.5 min-h-[34px] relative">
-                    {suggestionsError && (
-                      <div className="text-[10px] p-2.5 bg-red-950/20 border border-red-900/40 rounded-lg text-red-400 font-sans w-full leading-relaxed">
-                        <div className="font-bold flex items-center gap-1.5 text-red-300">
-                          <span>⚠️ Gemini API Not Active</span>
-                        </div>
-                        <p className="mt-1 text-[9.5px] text-zinc-400">
-                          {suggestionsError}
-                        </p>
-                        <div className="mt-2 pt-2 border-t border-red-900/20 text-[9px] text-zinc-400 leading-normal">
-                          <p className="font-semibold text-zinc-300 mb-0.5">How to fix in AI Studio:</p>
-                          1. Click on the <span className="font-semibold text-white">Gear Icon</span> (Settings) at the top right of the screen.<br />
-                          2. Open the <span className="font-semibold text-white">Secrets</span> or <span className="font-semibold text-white">Environment Variables</span> panel.<br />
-                          3. Add a secret named <code className="bg-black/40 px-1.5 py-0.5 rounded text-amber-400 font-mono text-[9px]">GEMINI_API_KEY</code> with your Gemini key as the value.<br />
-                          4. Restart or refresh the page to apply!
-                        </div>
-                      </div>
-                    )}
-
                     {isSuggestionsLoading ? (
-                      // Beautiful dynamic skeleton loaders during dynamic Gemini API call!
                       Array.from({ length: 5 }).map((_, i) => (
                         <div
                           key={`loading-shimmer-${i}`}
@@ -2198,147 +2192,43 @@ export default function StandaloneHalftoneViewer() {
                         </div>
                       ))
                     ) : (
-                      suggestions.map((concept, index) => (
-                        <button
-                          key={`${concept.name}-${index}`}
-                          type="button"
-                          onClick={() => {
-                            setAiPrompt(concept.prompt);
-                            setAiError(null);
-                          }}
-                          className="text-[9px] px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-900 hover:border-indigo-500/60 hover:bg-indigo-900/20 text-zinc-300 transition-all cursor-pointer flex items-center gap-1 font-sans font-medium hover:scale-102 hover:text-white"
-                          title={concept.prompt}
-                        >
-                          {concept.name}
-                        </button>
-                      ))
+                      suggestions.map((concept, index) => {
+                        // Dynamic beautiful color presets for the design bullets/circles to stand out spectacularly!
+                        const dotColors = [
+                          'bg-indigo-400 shadow-[0_0_6px_rgba(129,140,248,0.6)]',
+                          'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]',
+                          'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]',
+                          'bg-rose-400 shadow-[0_0_6px_rgba(248,113,113,0.6)]',
+                          'bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.6)]'
+                        ];
+                        const activeDotColor = dotColors[index % dotColors.length];
+
+                        return (
+                          <button
+                            key={`${concept.name}-${index}`}
+                            type="button"
+                            onClick={() => {
+                              setAiPrompt(concept.name);
+                              setAiError(null);
+                              setSaveToast(`Inspiration selected: "${concept.name}"`);
+                              setTimeout(() => setSaveToast(null), 2500);
+                            }}
+                            className="text-[10px] px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-indigo-500/60 hover:bg-zinc-850/80 text-zinc-100 font-sans font-medium transition-all cursor-pointer flex items-center gap-2 hover:scale-103 shadow-sm hover:text-white"
+                            title={concept.prompt}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${activeDotColor} shrink-0 animate-pulse`} />
+                            <span>{concept.name}</span>
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                   
                   {!isSuggestionsLoading && (
                     <p className="text-[8px] text-zinc-500 text-center font-mono italic">
-                      💡 Click any concept button above to populate the AI prompt area instantenously.
+                      💡 Click any concept button above to insert it as your styling query, then hit the compile button above to apply.
                     </p>
                   )}
-                </div>
-
-                {/* Import / Export System Codes (Support pasted user base64 codes!) */}
-                <div className="mt-2 pt-3 border-t border-zinc-900/60 flex flex-col gap-2">
-                  <span className="text-[8px] font-bold font-mono tracking-widest text-zinc-500 uppercase">IMPORT / EXPORT SETTINGS CODE</span>
-                  
-                  <div className="flex gap-1.5">
-                    <input
-                      placeholder="Paste Base64 settings code here..."
-                      value={importCode}
-                      onChange={(e) => {
-                        setImportCode(e.target.value);
-                        setImportError(null);
-                      }}
-                      className="flex-1 px-2.5 py-1.5 bg-zinc-950 border border-zinc-900 hover:border-zinc-850 text-zinc-200 focus:outline-none focus:border-zinc-700 font-mono text-[9px] rounded"
-                    />
-                    <button
-                      onClick={() => {
-                        if (!importCode.trim()) return;
-                        try {
-                          const cleanB64 = importCode.trim().replace(/^#/, '');
-                          
-                          // Ensure base64 padding
-                          let paddedB64 = cleanB64;
-                          while (paddedB64.length % 4 !== 0) {
-                            paddedB64 += '=';
-                          }
-
-                          let decodedString = '';
-                          try {
-                            decodedString = decodeURIComponent(escape(atob(paddedB64)));
-                          } catch (e1) {
-                            // Secondary fallback decoder if binary or raw characters exist
-                            decodedString = atob(paddedB64);
-                          }
-                          
-                          let parsed: any = null;
-                          try {
-                            parsed = JSON.parse(decodedString);
-                          } catch (e2) {
-                            // Resilient JSON parser for truncated strings
-                            let jsonStr = decodedString.trim();
-                            for (let i = jsonStr.length; i > 0; i--) {
-                              const sub = jsonStr.substring(0, i);
-                              const subOpenBraces = (sub.match(/\{/g) || []).length;
-                              const subClosedBraces = (sub.match(/\}/g) || []).length;
-                              const subOpenBrackets = (sub.match(/\[/g) || []).length;
-                              const subClosedBrackets = (sub.match(/\]/g) || []).length;
-                              
-                              let closing = '';
-                              for (let b = 0; b < (subOpenBraces - subClosedBraces); b++) closing += '}';
-                              for (let b = 0; b < (subOpenBrackets - subClosedBrackets); b++) closing += ']';
-                              
-                              try {
-                                parsed = JSON.parse(sub + closing);
-                                if (parsed && parsed.settings) break;
-                              } catch (err) {}
-                              
-                              try {
-                                parsed = JSON.parse(sub + '"' + closing);
-                                if (parsed && parsed.settings) break;
-                              } catch (err) {}
-                              
-                              try {
-                                parsed = JSON.parse(sub + '0' + closing);
-                                if (parsed && parsed.settings) break;
-                              } catch (err) {}
-                            }
-                          }
-
-                          if (parsed && parsed.settings) {
-                            // Merge imported settings with initial settings inside a clean updater
-                            onChange((prev) => {
-                              const newSettings = { ...prev, ...parsed.settings };
-                              // Deep merge nesting if needed
-                              if (parsed.settings.lighting) newSettings.lighting = { ...prev.lighting, ...parsed.settings.lighting };
-                              if (parsed.settings.material) newSettings.material = { ...prev.material, ...parsed.settings.material };
-                              if (parsed.settings.halftone) newSettings.halftone = { ...prev.halftone, ...parsed.settings.halftone };
-                              if (parsed.settings.background) newSettings.background = { ...prev.background, ...parsed.settings.background };
-                              if (parsed.settings.animation) newSettings.animation = { ...prev.animation, ...parsed.settings.animation };
-                              return newSettings;
-                            });
-                            setImportCode('');
-                            setImportError('Import successful!');
-                            setTimeout(() => setImportError(null), 3000);
-                          } else {
-                            throw new Error('Invalid settings format.');
-                          }
-                        } catch (err) {
-                          setImportError('Could not decode settings code. Ensure it is copied correctly.');
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-mono font-bold rounded cursor-pointer transition-colors"
-                    >
-                      Import
-                    </button>
-                  </div>
-
-                  {importError && (
-                    <span className="text-[9px] text-zinc-400 font-mono">{importError}</span>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      try {
-                        const payload = JSON.stringify({ settings });
-                        const base64 = btoa(unescape(encodeURIComponent(payload)));
-                        navigator.clipboard.writeText(base64);
-                        setImportCode(base64);
-                        setImportError('Current configuration copied to clipboard!');
-                        setTimeout(() => setImportError(null), 3000);
-                      } catch (err) {
-                        setImportError('Failed to export current configuration.');
-                      }
-                    }}
-                    className="w-full py-1.5 bg-zinc-900/50 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-300 border border-zinc-850 border-dashed rounded text-[9px] font-mono tracking-wider uppercase transition-all text-center cursor-pointer"
-                  >
-                    Export Current Config as Base64 Code
-                  </button>
                 </div>
               </div>
             )}
@@ -4437,23 +4327,7 @@ export default function StandaloneHalftoneViewer() {
             </div>
           </div>
 
-          {/* DANGER ZONE RESET BUTTON */}
-          {onReset && (
-            <div className="flex flex-col gap-1 bg-zinc-950 p-4 rounded-xl border border-red-950/40 mt-1">
-              <h4 className="text-[10px] font-bold tracking-widest text-red-400/80 uppercase font-mono mb-2">DANGER ZONE</h4>
-              <p className="text-[11px] text-zinc-500 leading-relaxed font-sans mb-4">
-                Instantly restore all grids, mesh parameters, camera orbits, material parameters, and lights back to original defaults.
-              </p>
-              <button
-                onClick={onReset}
-                className="w-full py-2.5 bg-red-950/10 hover:bg-red-950/25 text-red-400 border border-red-900/40 rounded-lg text-xs font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <RotateCcw size={14} className="animate-spin-slow" />
-                Reset Defaults
-              </button>
-            </div>
-          )}
-
+          
         </div>
       )}
 

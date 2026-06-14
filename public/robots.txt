@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://cognistudio.vercel.app/sitemap.xml
+Sitemap: https://cognistudio.com/sitemap.xml

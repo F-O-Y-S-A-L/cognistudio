@@ -18,10 +18,18 @@ import {
   Magnet,
   Activity,
   FileCode,
-  Check
+  Check,
+  ChevronRight,
+  Compass,
+  Search,
+  Dice5,
+  Star,
+  Film,
+  Trash
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Delaunay } from 'd3-delaunay';
+import { DEFAULT_30_PRESETS, MASTERPIECES_CATALOG, generateProceduralIdea, DesignPreset } from './CellPresetsData';
 
 // High-Performance Spatial Partitioning Hash Grid
 class ParticleGrid {
@@ -76,6 +84,11 @@ interface CellPoint {
 }
 
 export default function CellGenerator() {
+  // --- Design Library & Presets State ---
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [presetList, setPresetList] = useState<DesignPreset[]>(DEFAULT_30_PRESETS);
+  const [searchQuery, setSearchQuery] = useState('');
+
   // --- Geometry Configuration ---
   const [pointCount, setPointCount] = useState(45);
   const [cellPadding, setCellPadding] = useState(10);
@@ -152,7 +165,7 @@ export default function CellGenerator() {
 
   // --- UI States ---
   const [activeTab, setActiveTab] = useState<'geometry' | 'style' | 'motion' | 'export'>('geometry');
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const hoveredIndexRef = useRef<number | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedHtml, setCopiedHtml] = useState(false);
@@ -166,6 +179,286 @@ export default function CellGenerator() {
   const recordedBlobsRef = useRef<Blob[]>([]);
   const isRecordingHighResRef = useRef(false);
   const recordingScaleRef = useRef(1);
+
+  // --- 5-SECOND LOOP RECORDER & FAVORITES ---
+  const [recordCountdown, setRecordCountdown] = useState<number | null>(null);
+  const lastSavedConfigRef = useRef<any>(null);
+  const [localHistory, setLocalHistory] = useState<any[]>([]);
+  const [localFuture, setLocalFuture] = useState<any[]>([]);
+
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('favorites_cell_presets');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [customPresets, setCustomPresets] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('custom_cell_presets');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [newPresetName, setNewPresetName] = useState('');
+
+  const getCurrentConfig = () => {
+    return {
+      pointCount,
+      cellPadding,
+      pointPattern,
+      cellRoundness,
+      relaxation,
+      chaos,
+      cellGeometryType,
+      handDrawn,
+      wobbleAmplitude,
+      wobbleFrequency,
+      cellScaleMultiplier,
+      geomWarp,
+      colorScheme,
+      renderMode,
+      strokeWidth,
+      shadowDepth,
+      glowIntensity,
+      isDashed,
+      contourLevels,
+      contourStyle,
+      doubleStroke,
+      showJoints,
+      jointSize,
+      useCustomPalette,
+      customBgColor,
+      customStrokeColor,
+      customAccentColor,
+      customPalette,
+      isAnimate,
+      speed,
+      oscillation,
+      magneticMode,
+      influenceRadius,
+      magneticStrength,
+      breatheIntensity,
+      showLabels,
+      customLabels,
+      labelFontSize,
+      hoverPresetType,
+      hover3DDepth,
+      hoverTiltStrength,
+      hoverPinSize,
+      hoverPinColor,
+      hoverNeonGlow,
+      hoverBorderExtend,
+      hoverIsSinking,
+      springStrength,
+      drift,
+      bgTexture
+    };
+  };
+
+  const applyConfig = (conf: any) => {
+    if (!conf) return;
+    if (conf.pointCount !== undefined) setPointCount(conf.pointCount);
+    if (conf.cellPadding !== undefined) setCellPadding(conf.cellPadding);
+    if (conf.pointPattern !== undefined) setPointPattern(conf.pointPattern);
+    if (conf.cellRoundness !== undefined) setCellRoundness(conf.cellRoundness);
+    if (conf.relaxation !== undefined) setRelaxation(conf.relaxation);
+    if (conf.chaos !== undefined) setChaos(conf.chaos);
+    if (conf.cellGeometryType !== undefined) setCellGeometryType(conf.cellGeometryType);
+    if (conf.handDrawn !== undefined) setHandDrawn(conf.handDrawn);
+    if (conf.wobbleAmplitude !== undefined) setWobbleAmplitude(conf.wobbleAmplitude);
+    if (conf.wobbleFrequency !== undefined) setWobbleFrequency(conf.wobbleFrequency);
+    if (conf.cellScaleMultiplier !== undefined) setCellScaleMultiplier(conf.cellScaleMultiplier);
+    if (conf.geomWarp !== undefined) setGeomWarp(conf.geomWarp);
+    if (conf.colorScheme !== undefined) setColorScheme(conf.colorScheme);
+    if (conf.renderMode !== undefined) setRenderMode(conf.renderMode);
+    if (conf.strokeWidth !== undefined) setStrokeWidth(conf.strokeWidth);
+    if (conf.shadowDepth !== undefined) setShadowDepth(conf.shadowDepth);
+    if (conf.glowIntensity !== undefined) setGlowIntensity(conf.glowIntensity);
+    if (conf.isDashed !== undefined) setIsDashed(conf.isDashed);
+    if (conf.contourLevels !== undefined) setContourLevels(conf.contourLevels);
+    if (conf.contourStyle !== undefined) setContourStyle(conf.contourStyle);
+    if (conf.doubleStroke !== undefined) setDoubleStroke(conf.doubleStroke);
+    if (conf.showJoints !== undefined) setShowJoints(conf.showJoints);
+    if (conf.jointSize !== undefined) setJointSize(conf.jointSize);
+    if (conf.useCustomPalette !== undefined) setUseCustomPalette(conf.useCustomPalette);
+    if (conf.customBgColor !== undefined) setCustomBgColor(conf.customBgColor);
+    if (conf.customStrokeColor !== undefined) setCustomStrokeColor(conf.customStrokeColor);
+    if (conf.customAccentColor !== undefined) setCustomAccentColor(conf.customAccentColor);
+    if (conf.customPalette !== undefined) setCustomPalette(conf.customPalette);
+    if (conf.isAnimate !== undefined) setIsAnimate(conf.isAnimate);
+    if (conf.speed !== undefined) setSpeed(conf.speed);
+    if (conf.oscillation !== undefined) setOscillation(conf.oscillation);
+    if (conf.magneticMode !== undefined) setMagneticMode(conf.magneticMode);
+    if (conf.influenceRadius !== undefined) setInfluenceRadius(conf.influenceRadius);
+    if (conf.magneticStrength !== undefined) setMagneticStrength(conf.magneticStrength);
+    if (conf.breatheIntensity !== undefined) setBreatheIntensity(conf.breatheIntensity);
+    if (conf.showLabels !== undefined) setShowLabels(conf.showLabels);
+    if (conf.customLabels !== undefined) setCustomLabels(conf.customLabels);
+    if (conf.labelFontSize !== undefined) setLabelFontSize(conf.labelFontSize);
+    if (conf.hoverPresetType !== undefined) setHoverPresetType(conf.hoverPresetType);
+    if (conf.hover3DDepth !== undefined) setHover3DDepth(conf.hover3DDepth);
+    if (conf.hoverTiltStrength !== undefined) setHoverTiltStrength(conf.hoverTiltStrength);
+    if (conf.hoverPinSize !== undefined) setHoverPinSize(conf.hoverPinSize);
+    if (conf.hoverPinColor !== undefined) setHoverPinColor(conf.hoverPinColor);
+    if (conf.hoverNeonGlow !== undefined) setHoverNeonGlow(conf.hoverNeonGlow);
+    if (conf.hoverBorderExtend !== undefined) setHoverBorderExtend(conf.hoverBorderExtend);
+    if (conf.hoverIsSinking !== undefined) setHoverIsSinking(conf.hoverIsSinking);
+    if (conf.springStrength !== undefined) setSpringStrength(conf.springStrength);
+    if (conf.drift !== undefined) setDrift(conf.drift);
+    if (conf.bgTexture !== undefined) setBgTexture(conf.bgTexture);
+  };
+
+  const saveToHistory = (newConf: any) => {
+    if (lastSavedConfigRef.current && JSON.stringify(lastSavedConfigRef.current) === JSON.stringify(newConf)) {
+      return;
+    }
+    setLocalHistory(prev => {
+      const updated = [...prev, lastSavedConfigRef.current || newConf];
+      if (updated.length > 50) updated.shift();
+      return updated;
+    });
+    setLocalFuture([]);
+    lastSavedConfigRef.current = newConf;
+  };
+
+  const handleRecord5Sec = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      showToast('Error: Canvas coordinate viewport not initialized.');
+      return;
+    }
+
+    if (recordingStatus === 'recording') {
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
+      }
+      return;
+    }
+
+    const originalWidth = containerRef.current?.clientWidth || canvas.width;
+    const originalHeight = containerRef.current?.clientHeight || canvas.height;
+    
+    let targetHeight = 1080; 
+    let scale = targetHeight / originalHeight;
+    let finalWidth = originalWidth * scale;
+    let finalHeight = originalHeight * scale;
+
+    isRecordingHighResRef.current = true;
+    recordingScaleRef.current = scale;
+    canvas.width = Math.floor(finalWidth);
+    canvas.height = Math.floor(finalHeight);
+
+    recordedBlobsRef.current = [];
+    const stream = canvas.captureStream(30);
+
+    let options = { 
+      mimeType: 'video/webm;codecs=vp9,opus', 
+      videoBitsPerSecond: 12000000 
+    };
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { 
+        mimeType: 'video/webm', 
+        videoBitsPerSecond: 12000000 
+      };
+    }
+
+    try {
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      setRecordingStatus('recording');
+      setRecordCountdown(5);
+
+      const intervalId = setInterval(() => {
+        setRecordCountdown(prev => {
+          if (prev === null || prev <= 1) {
+            clearInterval(intervalId);
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedBlobsRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        clearInterval(intervalId);
+        setRecordCountdown(null);
+        isRecordingHighResRef.current = false;
+        if (containerRef.current) {
+          canvas.width = containerRef.current.clientWidth;
+          canvas.height = containerRef.current.clientHeight;
+        }
+        setRecordingStatus('idle');
+        const superBuffer = new Blob(recordedBlobsRef.current, { type: 'video/webm' });
+        const videoURL = URL.createObjectURL(superBuffer);
+        const link = document.createElement('a');
+        link.download = `organic-cells-5s-loop-${Date.now()}.webm`;
+        link.href = videoURL;
+        link.click();
+        showToast('Success: 5s Cellular Loop Recorder complete!');
+      };
+
+      mediaRecorder.start();
+
+      setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop();
+        }
+      }, 5000);
+
+    } catch (err) {
+      console.warn(err);
+      setRecordCountdown(null);
+      showToast('Media recording blocked in current frame sandbox.');
+    }
+  };
+
+  const toggleFavoritePreset = (presetId: string) => {
+    setFavoriteIds(prev => {
+      const updated = prev.includes(presetId) 
+        ? prev.filter(id => id !== presetId)
+        : [...prev, presetId];
+      localStorage.setItem('favorites_cell_presets', JSON.stringify(updated));
+      showToast(prev.includes(presetId) ? 'Removed from favorites' : 'Added to favorites!');
+      return updated;
+    });
+  };
+
+  const saveCurrentAsCustomPreset = () => {
+    if (!newPresetName.trim()) {
+      showToast('Please type a preset name first!');
+      return;
+    }
+    const newPreset = {
+      id: `custom_${Date.now()}`,
+      name: newPresetName.trim(),
+      category: 'Custom Creation',
+      description: 'Your custom designed cell pattern configuration',
+      config: getCurrentConfig()
+    };
+    const updated = [newPreset, ...customPresets];
+    setCustomPresets(updated);
+    localStorage.setItem('custom_cell_presets', JSON.stringify(updated));
+    setNewPresetName('');
+    showToast(`Saved Custom Preset: "${newPreset.name}"!`);
+  };
+
+  const deleteCustomPreset = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = customPresets.filter(p => p.id !== id);
+    setCustomPresets(updated);
+    localStorage.setItem('custom_cell_presets', JSON.stringify(updated));
+    showToast('Deleted custom preset');
+  };
 
   // Refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -241,6 +534,95 @@ export default function CellGenerator() {
   const showToast = (message: string) => {
     setToastMessage(message);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleApplyPreset = (preset: DesignPreset) => {
+    saveToHistory(getCurrentConfig());
+    const conf = preset.config;
+    if (!conf) return;
+
+    if (conf.pointCount !== undefined) setPointCount(conf.pointCount);
+    if (conf.cellPadding !== undefined) setCellPadding(conf.cellPadding);
+    if (conf.pointPattern !== undefined) setPointPattern(conf.pointPattern);
+    if (conf.cellRoundness !== undefined) setCellRoundness(conf.cellRoundness);
+    if (conf.relaxation !== undefined) setRelaxation(conf.relaxation);
+    if (conf.chaos !== undefined) setChaos(conf.chaos);
+    if (conf.cellGeometryType !== undefined) setCellGeometryType(conf.cellGeometryType);
+    if (conf.handDrawn !== undefined) setHandDrawn(conf.handDrawn);
+    if (conf.wobbleAmplitude !== undefined) setWobbleAmplitude(conf.wobbleAmplitude);
+    if (conf.wobbleFrequency !== undefined) setWobbleFrequency(conf.wobbleFrequency);
+    if (conf.cellScaleMultiplier !== undefined) setCellScaleMultiplier(conf.cellScaleMultiplier);
+    if (conf.geomWarp !== undefined) setGeomWarp(conf.geomWarp);
+    if (conf.colorScheme !== undefined) setColorScheme(conf.colorScheme);
+    if (conf.renderMode !== undefined) setRenderMode(conf.renderMode);
+    if (conf.strokeWidth !== undefined) setStrokeWidth(conf.strokeWidth);
+    if (conf.shadowDepth !== undefined) setShadowDepth(conf.shadowDepth);
+    if (conf.glowIntensity !== undefined) setGlowIntensity(conf.glowIntensity);
+    if (conf.isDashed !== undefined) setIsDashed(conf.isDashed);
+    if (conf.contourLevels !== undefined) setContourLevels(conf.contourLevels);
+    if (conf.contourStyle !== undefined) setContourStyle(conf.contourStyle);
+    if (conf.doubleStroke !== undefined) setDoubleStroke(conf.doubleStroke);
+    if (conf.showJoints !== undefined) setShowJoints(conf.showJoints);
+    if (conf.jointSize !== undefined) setJointSize(conf.jointSize);
+    if (conf.useCustomPalette !== undefined) setUseCustomPalette(conf.useCustomPalette);
+    if (conf.customBgColor !== undefined) setCustomBgColor(conf.customBgColor);
+    if (conf.customStrokeColor !== undefined) setCustomStrokeColor(conf.customStrokeColor);
+    if (conf.customAccentColor !== undefined) setCustomAccentColor(conf.customAccentColor);
+    if (conf.customPalette !== undefined) setCustomPalette(conf.customPalette);
+    if (conf.isAnimate !== undefined) setIsAnimate(conf.isAnimate);
+    if (conf.speed !== undefined) setSpeed(conf.speed);
+    if (conf.oscillation !== undefined) setOscillation(conf.oscillation);
+    if (conf.magneticMode !== undefined) setMagneticMode(conf.magneticMode);
+    if (conf.influenceRadius !== undefined) setInfluenceRadius(conf.influenceRadius);
+    if (conf.magneticStrength !== undefined) setMagneticStrength(conf.magneticStrength);
+    if (conf.breatheIntensity !== undefined) setBreatheIntensity(conf.breatheIntensity);
+    if (conf.showLabels !== undefined) setShowLabels(conf.showLabels);
+    if (conf.customLabels !== undefined) setCustomLabels(conf.customLabels);
+    if (conf.labelFontSize !== undefined) setLabelFontSize(conf.labelFontSize);
+    if (conf.hoverPresetType !== undefined) setHoverPresetType(conf.hoverPresetType);
+    if (conf.hover3DDepth !== undefined) setHover3DDepth(conf.hover3DDepth);
+    if (conf.hoverTiltStrength !== undefined) setHoverTiltStrength(conf.hoverTiltStrength);
+    if (conf.hoverPinSize !== undefined) setHoverPinSize(conf.hoverPinSize);
+    if (conf.hoverPinColor !== undefined) setHoverPinColor(conf.hoverPinColor);
+    if (conf.hoverNeonGlow !== undefined) setHoverNeonGlow(conf.hoverNeonGlow);
+    if (conf.hoverBorderExtend !== undefined) setHoverBorderExtend(conf.hoverBorderExtend);
+    if (conf.hoverIsSinking !== undefined) setHoverIsSinking(conf.hoverIsSinking);
+    if (conf.springStrength !== undefined) setSpringStrength(conf.springStrength);
+    if (conf.drift !== undefined) setDrift(conf.drift);
+    if (conf.bgTexture !== undefined) setBgTexture(conf.bgTexture);
+
+    showToast(`Loaded Design Profile: "${preset.name}"`);
+  };
+
+  const handleGenerateRandomIdea = () => {
+    const newIdea = generateProceduralIdea();
+    const fullPreset: DesignPreset = {
+      id: `custom-procedural-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      ...newIdea
+    };
+    
+    // Apply immediately
+    handleApplyPreset(fullPreset);
+
+    // List addition
+    setPresetList(prev => [fullPreset, ...prev]);
+  };
+
+  const handleLoadMasterpieces = () => {
+    const loaded: DesignPreset[] = [];
+    const shuffled = [...MASTERPIECES_CATALOG].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, 5);
+    
+    selected.forEach((master, index) => {
+      loaded.push({
+        id: `masterpiece-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`,
+        ...master
+      });
+    });
+    
+    setPresetList(prev => [...loaded, ...prev]);
+    handleApplyPreset(loaded[0]);
+    showToast(`✨ Loaded 5 Premium Masterpieces! Applied: "${loaded[0].name}"`);
   };
 
   const initPoints = (width: number, height: number) => {
@@ -468,7 +850,18 @@ export default function CellGenerator() {
         });
       }
       // Candidate must be within interaction corridor
-      setHoveredIndex(minDist < (influenceRadius * influenceRadius) / 4 ? nearest : null);
+      const currentHovered = minDist < (influenceRadius * influenceRadius) / 4 ? nearest : null;
+      if (hoveredIndexRef.current !== currentHovered) {
+        hoveredIndexRef.current = currentHovered;
+        const cursorInner = document.getElementById('cell-cursor-inner');
+        if (cursorInner) {
+          if (currentHovered !== null) {
+            cursorInner.style.transform = 'scale(1.6) rotate(45deg)';
+          } else {
+            cursorInner.style.transform = 'scale(1) rotate(0deg)';
+          }
+        }
+      }
 
       // Pulse breathing loop factor
       const pulseBreathe = 1.0 + Math.sin(time / 1500) * breatheIntensity * 0.15;
@@ -486,7 +879,7 @@ export default function CellGenerator() {
         p.vy += Fy;
 
         // Apply interactive micro jitter/shake value if hovered
-        if (hoveredIndex === i && hoverJiggle > 0) {
+        if (hoveredIndexRef.current === i && hoverJiggle > 0) {
           p.vx += (Math.random() - 0.5) * hoverJiggle * 1.5;
           p.vy += (Math.random() - 0.5) * hoverJiggle * 1.5;
         }
@@ -619,7 +1012,7 @@ export default function CellGenerator() {
           if (!polygon) return;
         }
 
-        const isHovered = hoveredIndex === i;
+        const isHovered = hoveredIndexRef.current === i;
         ctx.save();
 
         if (shadowDepth > 0 && hoverPresetType !== 'glow-valley') {
@@ -1142,7 +1535,7 @@ export default function CellGenerator() {
       window.removeEventListener('resize', resize);
     };
   }, [
-    isAnimate, cellRoundness, strokeWidth, shadowDepth, hoveredIndex, contourLevels, 
+    isAnimate, cellRoundness, strokeWidth, shadowDepth, contourLevels, 
     renderMode, speed, oscillation, theme, cellPadding, magneticMode, influenceRadius, 
     magneticStrength, isDashed, glowIntensity, drift, bgTexture, handDrawn, 
     wobbleAmplitude, wobbleFrequency, cellGeometryType, showJoints, jointSize, 
@@ -1581,9 +1974,167 @@ export default function CellGenerator() {
         <canvas 
           ref={canvasRef} 
           onMouseMove={handleMouseMove}
-          onMouseLeave={() => { mouseRef.current = { x: -2000, y: -2000 }; setHoveredIndex(null); }}
+          onMouseLeave={() => { 
+            mouseRef.current = { x: -2000, y: -2000 }; 
+            hoveredIndexRef.current = null;
+            const cursorInner = document.getElementById('cell-cursor-inner');
+            if (cursorInner) {
+              cursorInner.style.transform = 'scale(1) rotate(0deg)';
+            }
+          }}
           className="absolute inset-0 w-full h-full cursor-none" 
         />
+
+        {/* Toggle Design Library Floating Trigger Button */}
+        <div className="absolute top-6 left-6 z-40 pointer-events-auto flex items-center gap-3">
+          <button
+            onClick={() => setShowLibrary(!showLibrary)}
+            className="px-5 py-2.5 rounded-full bg-black/85 hover:bg-black border border-white/15 hover:border-yellow-400/50 text-white hover:text-yellow-400 text-[9px] font-bold tracking-widest flex items-center gap-2.5 transition-all shadow-xl backdrop-blur-md cursor-pointer uppercase font-mono"
+          >
+            <Compass size={13} className={showLibrary ? 'text-yellow-400 animate-spin' : 'text-white'} />
+            {showLibrary ? 'Hide Library' : 'Explore 70+ Premium Designs'}
+          </button>
+        </div>
+
+        {/* Design Library Sliding Panel Overlay */}
+        <AnimatePresence>
+          {showLibrary && (
+            <motion.div 
+              initial={{ x: -350, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -350, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="absolute top-0 left-0 bottom-0 w-85 bg-black/95 border-r border-white/10 backdrop-blur-xl z-30 flex flex-col pointer-events-auto p-6 overflow-hidden select-none"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-white/15">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-yellow-400 font-mono tracking-widest uppercase">DESIGN LIBRARY</span>
+                  <span className="bg-white/10 text-white/70 text-[9px] px-2 py-0.5 rounded-full font-mono font-bold">
+                    {presetList.length} IDEAS
+                  </span>
+                </div>
+                <button 
+                  onClick={() => setShowLibrary(false)}
+                  className="p-1 hover:bg-white/10 rounded-full transition-colors cursor-pointer text-white/50 hover:text-white"
+                >
+                  <Minimize2 size={14} />
+                </button>
+              </div>
+
+              {/* Action Deck - Generates new design or loads masterpieces */}
+              <div className="py-4 space-y-2 border-b border-white/10">
+                <div className="flex gap-2">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleGenerateRandomIdea}
+                    className="flex-1 py-2.5 rounded-lg border border-yellow-400/30 hover:border-yellow-400/60 text-yellow-400 text-[10px] font-bold tracking-wider uppercase font-mono flex items-center justify-center gap-1.5 cursor-pointer bg-yellow-400/5 hover:bg-yellow-400/10 transition-all"
+                  >
+                    <Dice5 size={13} className="animate-bounce" />
+                    Random Idea
+                  </motion.button>
+                  
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleLoadMasterpieces}
+                    className="flex-1 py-2.5 rounded-lg border border-white/10 hover:border-white/25 text-white text-[10px] font-bold tracking-wider uppercase font-mono flex items-center justify-center gap-1.5 cursor-pointer bg-white/5 hover:bg-white/10 transition-all"
+                  >
+                    <Sparkles size={12} className="text-yellow-400" />
+                    Load 5 Premium
+                  </motion.button>
+                </div>
+                <p className="text-[9px] text-white/40 leading-relaxed font-mono">
+                  💡 No design ideas? Generate endless random cells, or click <strong className="text-yellow-400">Load 5 Premium</strong> to load even more beautiful designs!
+                </p>
+              </div>
+
+              {/* Search filter for presets list */}
+              <div className="mt-3 relative flex items-center bg-white/5 rounded-lg border border-white/10 px-3 py-1.5 shrink-0">
+                <Search size={13} className="text-white/40 mr-2 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Filter 70+ library designs..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-transparent text-white text-xs placeholder-white/30 outline-none w-full font-mono"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="text-[9px] text-white/40 hover:text-white font-mono">
+                    CLEAR
+                  </button>
+                )}
+              </div>
+
+              {/* Save Current Style as Custom Preset */}
+              <div className="mt-4 p-3 rounded-lg border border-white/5 bg-white/[0.01] space-y-2 shrink-0">
+                <p className="text-[9px] font-mono font-bold text-yellow-400/70 uppercase tracking-widest">Save Current Configuration</p>
+                <div className="flex gap-2">
+                  <input
+                    value={newPresetName}
+                    onChange={(e) => setNewPresetName(e.target.value)}
+                    placeholder="Enter custom preset name..."
+                    className="flex-1 bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-yellow-400/50"
+                  />
+                  <button
+                    onClick={saveCurrentAsCustomPreset}
+                    className="bg-yellow-400 text-black font-bold font-mono text-[9px] px-3 py-1.5 rounded hover:bg-yellow-300 transition-colors cursor-pointer shrink-0"
+                  >
+                    SAVE
+                  </button>
+                </div>
+              </div>
+
+              {/* Presets Grid List */}
+              <div className="mt-4 flex-1 overflow-y-auto pr-1 space-y-2 scrollbar-none">
+                {[...customPresets, ...presetList].filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.category.toLowerCase().includes(searchQuery.toLowerCase())).map((preset) => {
+                  const isFav = favoriteIds.includes(preset.id);
+                  const isCustom = preset.id.toString().startsWith('custom_');
+                  return (
+                    <div 
+                      key={preset.id}
+                      onClick={() => handleApplyPreset(preset)}
+                      className="group/item flex items-center justify-between p-3 rounded-lg border border-white/5 hover:border-yellow-400/40 bg-white/[0.02] hover:bg-white/[0.04] transition-all cursor-pointer"
+                    >
+                      <div className="space-y-1 min-w-0 pr-2">
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-white group-hover/item:text-yellow-400 transition-colors uppercase tracking-wide truncate">
+                          {isFav && <Star size={10} className="fill-yellow-400 text-yellow-400 shrink-0" />}
+                          {preset.name}
+                        </div>
+                        <div className="text-[9px] text-white/40 flex items-center gap-2 min-w-0">
+                          <span className={`${isCustom ? 'text-yellow-400/70 font-bold' : 'text-white/35'} font-mono shrink-0`}>
+                            {isCustom ? '[CUSTOM]' : `[${preset.category}]`}
+                          </span>
+                          <span className="truncate font-mono font-medium">{preset.description}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+                        <button 
+                          onClick={() => toggleFavoritePreset(preset.id)}
+                          className="p-1 text-white/30 hover:text-yellow-400 transition-colors cursor-pointer"
+                          title="Favorite Preset"
+                        >
+                          <Star size={11} className={isFav ? "fill-yellow-400 text-yellow-400" : ""} />
+                        </button>
+                        {isCustom && (
+                          <button 
+                            onClick={(e) => deleteCustomPreset(preset.id, e)}
+                            className="p-1 text-white/30 hover:text-red-400 transition-colors cursor-pointer"
+                            title="Delete Preset"
+                          >
+                            <Trash size={11} />
+                          </button>
+                        )}
+                        <ChevronRight size={12} className="text-white/20 group-hover/item:translate-x-1 group-hover/item:text-yellow-400 transition-all" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         
         {/* Dynamic Canvas HUD bar */}
         <div className="absolute inset-x-0 bottom-0 p-8 pointer-events-none bg-linear-to-t from-black/80 via-black/20 to-transparent animate-fade-in">
@@ -1610,9 +2161,10 @@ export default function CellGenerator() {
            id="cell-cursor"
            style={{ transform: 'translate(-50%, -50%)' }}
         >
-          <motion.div 
-            animate={{ scale: hoveredIndex !== null ? 1.6 : 1, rotate: hoveredIndex !== null ? 45 : 0 }}
-            className="w-2 h-2 bg-white rounded-sm" 
+          <div 
+            id="cell-cursor-inner"
+            className="w-2 h-2 bg-white rounded-sm transition-transform duration-200" 
+            style={{ transform: 'scale(1) rotate(0deg)' }}
           />
         </div>
       </div>
@@ -1651,19 +2203,20 @@ export default function CellGenerator() {
             </div>
 
             {/* Global Animation Controller Status */}
-            <div className="flex items-center justify-between px-8 py-4 bg-white/[0.02] border-b border-white/5 font-mono">
-              <span className="text-[10px] uppercase tracking-widest text-white/50 font-bold">Simulation Engine</span>
+            <div className="flex items-center justify-between px-8 py-3 bg-white/[0.02] border-b border-white/5 font-mono">
+              <div className="flex items-center gap-2">
+              </div>
               <div className="flex items-center gap-3.5">
-                <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded tracking-wider ${isAnimate ? 'text-[#a3e635] bg-[#a3e635]/15 border border-[#a3e635]/20' : 'text-[#f87171] bg-[#f87171]/15 border border-[#f87171]/20'}`}>
-                  {isAnimate ? 'ACTIVE / RUNNING' : 'PAUSED / FROZEN'}
+                <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 tracking-wider ${isAnimate ? 'text-[#a3e635]' : 'text-[#f87171]'}`}>
+                  {isAnimate ? 'LIVE' : 'FROZEN'}
                 </span>
                 <button 
                   onClick={() => setIsAnimate(!isAnimate)} 
-                  className={`w-11 h-6 rounded-full relative transition-all duration-300 cursor-pointer flex items-center px-0.5 ${isAnimate ? 'bg-yellow-400' : 'bg-white/10'}`}
+                  className={`w-9 h-5 rounded-full relative transition-all duration-300 cursor-pointer flex items-center px-0.5 ${isAnimate ? 'bg-yellow-400' : 'bg-white/10'}`}
                   aria-label="Toggle Animation"
                 >
                   <div 
-                    className={`w-5 h-5 rounded-full bg-black shadow-md transition-transform duration-300 transform ${isAnimate ? 'translate-x-5' : 'translate-x-0'}`}
+                    className={`w-4 h-4 rounded-full bg-black shadow-md transition-transform duration-300 transform ${isAnimate ? 'translate-x-4' : 'translate-x-0'}`}
                   />
                 </button>
               </div>
@@ -2467,6 +3020,17 @@ export default function CellGenerator() {
                          >
                             <Activity size={14} className={recordingStatus === 'recording' ? 'animate-spin' : 'text-indigo-400'} />
                             {recordingStatus === 'recording' ? 'RECORDING...' : 'WEBM VIDEO (.WEBM)'}
+                          </motion.button>
+
+                          {/* 5-Second Loop Recorder Trigger */}
+                          <motion.button 
+                            whileHover={{ y: -3, scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={handleRecord5Sec} 
+                            className="col-span-2 py-4 font-bold uppercase text-[9px] tracking-[0.18em] rounded-xl transition-all flex flex-col items-center justify-center gap-2 backdrop-blur-md cursor-pointer border bg-yellow-400/10 hover:bg-yellow-400/20 border-yellow-400/30 text-yellow-400 mt-2"
+                          >
+                            <Film size={14} />
+                            {recordCountdown !== null ? `RECORDING LOOP... ${recordCountdown}s` : '5-SECOND QUICK LOOP RECORDER'}
                          </motion.button>
                       </div>
 

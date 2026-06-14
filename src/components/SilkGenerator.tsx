@@ -16,7 +16,6 @@ import {
   Video, 
   Code,
   Check,
-  Undo2,
   RefreshCw,
   Sun,
   Upload,
@@ -24,7 +23,10 @@ import {
   Tv,
   Eye,
   Info,
-  Maximize2
+  Maximize2,
+  Star,
+  Film,
+  Trash
 } from 'lucide-react';
 import { 
   SilkRibbonSetting, 
@@ -33,6 +35,55 @@ import {
   parseHexToRGB, 
   getChromaColor 
 } from './ThreeDMatrixHelper';
+
+interface GeometryFilterItem {
+  id: string;
+  label: string;
+  style: 'points' | 'wireframe' | 'mesh' | 'plexus' | 'stipple' | 'ascii' | 'topological_contour' | 'disintegrated_voxels';
+  desc: string;
+}
+
+const geometryFilters: GeometryFilterItem[] = [
+  // Plexus based
+  { id: 'plexus_classic', label: 'Plexus Core', style: 'plexus', desc: 'Standard interconnected constellation grid' },
+  { id: 'plexus_constellation', label: 'Ethereal Starfield', style: 'plexus', desc: 'Sparsely connected high-altitude node field' },
+  { id: 'plexus_lattice', label: 'Quantum Lattice', style: 'plexus', desc: 'Denser connection bridges with micro points' },
+  
+  // Stipple based
+  { id: 'stipple_classic', label: 'Stippled Dust', style: 'stipple', desc: 'Shaded halftone particle clouds' },
+  { id: 'stipple_micro', label: 'Atomic Vapor', style: 'stipple', desc: 'Ultra-fine stippling with high particle count' },
+  { id: 'stipple_giant', label: 'Fluid Globs', style: 'stipple', desc: 'Oversized luminous pixel clusters' },
+  
+  // ASCII based
+  { id: 'ascii_binary', label: 'Binary Waterfall', style: 'ascii', desc: 'Nostalgic matrix with 0 and 1 streams' },
+  { id: 'ascii_matrix', label: 'Terminal Scroll', style: 'ascii', desc: 'Classic alphanumeric machine code array' },
+  { id: 'ascii_hex', label: 'Hexadecimal Core', style: 'ascii', desc: 'Base-16 software scanning layout' },
+  
+  // Contour based
+  { id: 'contour_classic', label: 'Contours Classic', style: 'topological_contour', desc: 'Topographical altitude lines matching image' },
+  { id: 'contour_wave', label: 'Satin Ribbon Wave', style: 'topological_contour', desc: 'Dense flowing elevation sheets' },
+  { id: 'contour_heat', label: 'Thermal Isotherms', style: 'topological_contour', desc: 'Wide neon isometric band boundaries' },
+  
+  // Disintegrated Voxels based
+  { id: 'sand_decay', label: 'Sand Disintegration', style: 'disintegrated_voxels', desc: 'Melting voxels that drop downwards' },
+  { id: 'voxel_torrent', label: 'Data Torrent', style: 'disintegrated_voxels', desc: 'Highly reactive falling pixel code fragments' },
+  { id: 'voxel_heavy', label: 'Cosmic Ash Rain', style: 'disintegrated_voxels', desc: 'Slow, heavy falling ash cubes' },
+  
+  // Points based
+  { id: 'points_classic', label: 'Standard Particles', style: 'points', desc: 'Simple round point cloud representation' },
+  { id: 'points_soft', label: 'Interstellar Nebula', style: 'points', desc: 'Microscopic points creating vapor sheen' },
+  { id: 'points_glitched', label: 'Aberration Dust', style: 'points', desc: 'Heavy RGB horizontal chromatic offset splinters' },
+  
+  // Wireframe based
+  { id: 'wireframe_grid', label: 'Classic Wireframe', style: 'wireframe', desc: 'Empty polygonal grid framework' },
+  { id: 'wireframe_dense', label: 'Brutalist Blueprint', style: 'wireframe', desc: 'Dense architecture layout design sheets' },
+  { id: 'wireframe_wave', label: 'Dynamic Scanlines', style: 'wireframe', desc: 'Rhythmic vector strands moving in sequence' },
+  
+  // Mesh based
+  { id: 'mesh_shaded', label: 'Shaded Faces', style: 'mesh', desc: 'Flat retro-shaded polygonal meshes' },
+  { id: 'mesh_shiny', label: 'Prismatic Shells', style: 'mesh', desc: 'Chrome-shaded reflective surface elements' },
+  { id: 'mesh_solid', label: 'Glass Topography', style: 'mesh', desc: 'Heavy extruded solid block elements' }
+];
 
 export default function SilkGenerator() {
   // --- Common Configuration States ---
@@ -56,6 +107,8 @@ export default function SilkGenerator() {
   const [activeTab, setActiveTab] = useState<'design' | 'animation' | 'export'>('design');
 
   // --- Enhanced Aesthetic Customization States ---
+  const [presetSearch, setPresetSearch] = useState('');
+  const [presetFilter, setPresetFilter] = useState<'all' | 'ribbon' | 'mediamesh'>('all');
   const [chromaColorStart, setChromaColorStart] = useState('#ff007f');
   const [chromaColorEnd, setChromaColorEnd] = useState('#7a00ff');
   const [selectedRibbonId, setSelectedRibbonId] = useState<number>(1);
@@ -92,6 +145,7 @@ export default function SilkGenerator() {
   
   // Geometry Styles matching precise reference items
   const [meshStyle, setMeshStyle] = useState<'points' | 'wireframe' | 'mesh' | 'plexus' | 'stipple' | 'ascii' | 'topological_contour' | 'disintegrated_voxels'>('plexus');
+  const [activeGeometryFilter, setActiveGeometryFilter] = useState<string>('plexus_classic');
   
   // Quality & Preprocessing filters
   const [gridDensity, setGridDensity] = useState(45); // Mesh point rows/columns (e.g. 45x45)
@@ -122,6 +176,256 @@ export default function SilkGenerator() {
   const recordingScaleRef = useRef(1);
   const animationFrameId = useRef<number | null>(null);
   const timeRef = useRef<number>(0);
+
+  // --- 5-SECOND LOOP RECORDER, FAVORITES & UNDO/REDO ENGINES ---
+  const [recordCountdown, setRecordCountdown] = useState<number | null>(null);
+  const [localHistory, setLocalHistory] = useState<any[]>([]);
+  const [localFuture, setLocalFuture] = useState<any[]>([]);
+  const lastSavedConfigRef = useRef<any>(null);
+
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('favorites_silk_presets');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [customPresets, setCustomPresets] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('custom_silk_presets');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [newPresetName, setNewPresetName] = useState('');
+
+  const getCurrentConfig = () => {
+    return {
+      generatorMode,
+      chromaColorStart,
+      chromaColorEnd,
+      selectedRibbonId,
+      autoYawSpeed,
+      autoPitchSpeed,
+      numRibbons,
+      ribbons,
+      waveIntensity,
+      thickness,
+      lightIntensity,
+      twistRate,
+      shadingDetail,
+      wavePattern,
+      waveFrequency,
+      twistSpeed,
+      mediaType,
+      presetIndex,
+      meshStyle,
+      activeGeometryFilter,
+      gridDensity,
+      extrusionDepth,
+      particleSize,
+      meshWaveScale,
+      colorProfile,
+      chromaticAberration,
+      glitchIntensity,
+      contrastBoost,
+      brightnessThreshold,
+      plexusMaxDistance,
+      plexusMaxConnections,
+      asciiCharacterPalette,
+      particleDecaySpeed,
+      contourLevels
+    };
+  };
+
+  const applyConfig = (conf: any) => {
+    if (!conf) return;
+    if (conf.generatorMode !== undefined) setGeneratorMode(conf.generatorMode);
+    if (conf.chromaColorStart !== undefined) setChromaColorStart(conf.chromaColorStart);
+    if (conf.chromaColorEnd !== undefined) setChromaColorEnd(conf.chromaColorEnd);
+    if (conf.selectedRibbonId !== undefined) setSelectedRibbonId(conf.selectedRibbonId);
+    if (conf.autoYawSpeed !== undefined) setAutoYawSpeed(conf.autoYawSpeed);
+    if (conf.autoPitchSpeed !== undefined) setAutoPitchSpeed(conf.autoPitchSpeed);
+    if (conf.numRibbons !== undefined) setNumRibbons(conf.numRibbons);
+    if (conf.ribbons !== undefined) setRibbons(conf.ribbons);
+    if (conf.waveIntensity !== undefined) setWaveIntensity(conf.waveIntensity);
+    if (conf.thickness !== undefined) setThickness(conf.thickness);
+    if (conf.lightIntensity !== undefined) setLightIntensity(conf.lightIntensity);
+    if (conf.twistRate !== undefined) setTwistRate(conf.twistRate);
+    if (conf.shadingDetail !== undefined) setShadingDetail(conf.shadingDetail);
+    if (conf.wavePattern !== undefined) setWavePattern(conf.wavePattern);
+    if (conf.waveFrequency !== undefined) setWaveFrequency(conf.waveFrequency);
+    if (conf.twistSpeed !== undefined) setTwistSpeed(conf.twistSpeed);
+    if (conf.mediaType !== undefined) setMediaType(conf.mediaType);
+    if (conf.presetIndex !== undefined) setPresetIndex(conf.presetIndex);
+    if (conf.meshStyle !== undefined) setMeshStyle(conf.meshStyle);
+    if (conf.activeGeometryFilter !== undefined) setActiveGeometryFilter(conf.activeGeometryFilter);
+    if (conf.gridDensity !== undefined) setGridDensity(conf.gridDensity);
+    if (conf.extrusionDepth !== undefined) setExtrusionDepth(conf.extrusionDepth);
+    if (conf.particleSize !== undefined) setParticleSize(conf.particleSize);
+    if (conf.meshWaveScale !== undefined) setMeshWaveScale(conf.meshWaveScale);
+    if (conf.colorProfile !== undefined) setColorProfile(conf.colorProfile);
+    if (conf.chromaticAberration !== undefined) setChromaticAberration(conf.chromaticAberration);
+    if (conf.glitchIntensity !== undefined) setGlitchIntensity(conf.glitchIntensity);
+    if (conf.contrastBoost !== undefined) setContrastBoost(conf.contrastBoost);
+    if (conf.brightnessThreshold !== undefined) setBrightnessThreshold(conf.brightnessThreshold);
+    if (conf.plexusMaxDistance !== undefined) setPlexusMaxDistance(conf.plexusMaxDistance);
+    if (conf.plexusMaxConnections !== undefined) setPlexusMaxConnections(conf.plexusMaxConnections);
+    if (conf.asciiCharacterPalette !== undefined) setAsciiCharacterPalette(conf.asciiCharacterPalette);
+    if (conf.particleDecaySpeed !== undefined) setParticleDecaySpeed(conf.particleDecaySpeed);
+    if (conf.contourLevels !== undefined) setContourLevels(conf.contourLevels);
+  };
+
+  const saveToHistory = (newConf: any) => {
+    if (lastSavedConfigRef.current && JSON.stringify(lastSavedConfigRef.current) === JSON.stringify(newConf)) {
+      return;
+    }
+    setLocalHistory(prev => {
+      const updated = [...prev, lastSavedConfigRef.current || newConf];
+      if (updated.length > 50) updated.shift();
+      return updated;
+    });
+    setLocalFuture([]);
+    lastSavedConfigRef.current = newConf;
+  };
+
+  const handleRecord5Sec = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      triggerToast('Error: Canvas coordinate viewport not initialized.');
+      return;
+    }
+
+    if (recordingStatus === 'recording') {
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
+      }
+      return;
+    }
+
+    const originalWidth = containerRef.current?.clientWidth || canvas.width;
+    const originalHeight = containerRef.current?.clientHeight || canvas.height;
+    
+    let targetHeight = 1080; 
+    let scale = targetHeight / originalHeight;
+    let finalWidth = originalWidth * scale;
+    let finalHeight = originalHeight * scale;
+
+    isRecordingHighResRef.current = true;
+    recordingScaleRef.current = scale;
+    canvas.width = Math.floor(finalWidth);
+    canvas.height = Math.floor(finalHeight);
+
+    recordedBlobsRef.current = [];
+    const stream = canvas.captureStream(30);
+
+    let options = { 
+      mimeType: 'video/webm;codecs=vp9,opus', 
+      videoBitsPerSecond: 12000000 
+    };
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { 
+        mimeType: 'video/webm', 
+        videoBitsPerSecond: 12000000 
+      };
+    }
+
+    try {
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      setRecordingStatus('recording');
+      setRecordCountdown(5);
+
+      const intervalId = setInterval(() => {
+        setRecordCountdown(prev => {
+          if (prev === null || prev <= 1) {
+            clearInterval(intervalId);
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedBlobsRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        clearInterval(intervalId);
+        setRecordCountdown(null);
+        isRecordingHighResRef.current = false;
+        if (containerRef.current) {
+          canvas.width = containerRef.current.clientWidth;
+          canvas.height = containerRef.current.clientHeight;
+        }
+        setRecordingStatus('idle');
+        const superBuffer = new Blob(recordedBlobsRef.current, { type: 'video/webm' });
+        const videoURL = URL.createObjectURL(superBuffer);
+        const link = document.createElement('a');
+        link.download = `silk-flow-5s-loop-${Date.now()}.webm`;
+        link.href = videoURL;
+        link.click();
+        triggerToast('Success: 5s Flow Loop Recorder complete!');
+      };
+
+      mediaRecorder.start();
+
+      setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop();
+        }
+      }, 5000);
+
+    } catch (err) {
+      console.warn(err);
+      setRecordCountdown(null);
+      triggerToast('Media recording blocked in current frame sandbox.');
+    }
+  };
+
+  const toggleFavoritePreset = (presetId: string) => {
+    setFavoriteIds(prev => {
+      const updated = prev.includes(presetId) 
+        ? prev.filter(id => id !== presetId)
+        : [...prev, presetId];
+      localStorage.setItem('favorites_silk_presets', JSON.stringify(updated));
+      triggerToast(prev.includes(presetId) ? 'Removed from favorites' : 'Added to favorites!');
+      return updated;
+    });
+  };
+
+  const saveCurrentAsCustomPreset = () => {
+    if (!newPresetName.trim()) {
+      triggerToast('Please type a preset name first!');
+      return;
+    }
+    const newPreset = {
+      id: `custom_${Date.now()}`,
+      name: newPresetName.trim(),
+      category: generatorMode === 'ribbon' ? 'Ribbon Design' : 'Media Mesh Design',
+      description: 'Your custom designed silk flow pattern configuration',
+      config: getCurrentConfig()
+    };
+    const updated = [newPreset, ...customPresets];
+    setCustomPresets(updated);
+    localStorage.setItem('custom_silk_presets', JSON.stringify(updated));
+    setNewPresetName('');
+    triggerToast(`Saved Custom Preset: "${newPreset.name}"!`);
+  };
+
+  const deleteCustomPreset = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = customPresets.filter(p => p.id !== id);
+    setCustomPresets(updated);
+    localStorage.setItem('custom_silk_presets', JSON.stringify(updated));
+    triggerToast('Deleted custom preset');
+  };
   const mouseRef = useRef({ x: 0.5, y: 0.5, targetX: 0.5, targetY: 0.5 });
   const isDraggingRef = useRef(false);
   const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording' | 'finished'>('idle');
@@ -136,7 +440,19 @@ export default function SilkGenerator() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const triggerToast = showToast;
+
   const applyThemePreset = (themeId: string) => {
+    if (themeId && themeId.startsWith('custom_')) {
+      const custom = customPresets.find(p => p.id === themeId);
+      if (custom) {
+        saveToHistory(getCurrentConfig());
+        applyConfig(custom.config);
+        showToast(`Applied Custom Preset: "${custom.name}"`);
+        return;
+      }
+    }
+    saveToHistory(getCurrentConfig());
     switch (themeId) {
       case 'plexus_core':
         setGeneratorMode('mediamesh');
@@ -156,6 +472,84 @@ export default function SilkGenerator() {
         setChromaColorStart('#00f0ff');
         setChromaColorEnd('#ff007f');
         showToast('Applied Theme: Prismatic Plexus Core');
+        break;
+      case 'cyber_grid':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('stipple');
+        setColorProfile('chroma');
+        setGridDensity(50);
+        setExtrusionDepth(150);
+        setParticleSize(3.0);
+        setMeshWaveScale(30);
+        setContrastBoost(1.4);
+        setBrightnessThreshold(0.04);
+        setSpeed(0.5);
+        setChromaticAberration(8);
+        setIsTransparentBg(true);
+        setChromaColorStart('#39ff14');
+        setChromaColorEnd('#ff007f');
+        showToast('Applied Theme: Cyberpunk Grid Storm');
+        break;
+      case 'obsidian_flow':
+        setGeneratorMode('ribbon');
+        setNumRibbons(3);
+        setThickness(140);
+        setWaveIntensity(50);
+        setWavePattern('satin');
+        setWaveFrequency(0.7);
+        setTwistRate(1.0);
+        setTwistSpeed(1.2);
+        setSpeed(0.2);
+        setLightIntensity(0.5);
+        setIsTransparentBg(false);
+        setBackgroundColor('#050510');
+        setRibbons([
+          { id: 1, colorStart: '#111111', colorEnd: '#312e81', twistPhase: 0 },
+          { id: 2, colorStart: '#1e1b4b', colorEnd: '#4f46e5', twistPhase: Math.PI / 3 },
+          { id: 3, colorStart: '#111827', colorEnd: '#4338ca', twistPhase: (2 * Math.PI) / 3 }
+        ]);
+        showToast('Applied Theme: Obsidian Midnight Flow');
+        break;
+      case 'solar_flare':
+        setGeneratorMode('ribbon');
+        setNumRibbons(5);
+        setThickness(135);
+        setWaveIntensity(95);
+        setWavePattern('turbulent');
+        setWaveFrequency(1.5);
+        setTwistRate(1.7);
+        setTwistSpeed(2.8);
+        setSpeed(0.65);
+        setLightIntensity(1.35);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#ff4500', colorEnd: '#ffcc00', twistPhase: 0 },
+          { id: 2, colorStart: '#ff0000', colorEnd: '#ff8800', twistPhase: Math.PI / 5 },
+          { id: 3, colorStart: '#d84315', colorEnd: '#ffeb3b', twistPhase: (2 * Math.PI) / 5 },
+          { id: 4, colorStart: '#ff5722', colorEnd: '#ffc107', twistPhase: (3 * Math.PI) / 5 },
+          { id: 5, colorStart: '#ff3d00', colorEnd: '#ffe082', twistPhase: (4 * Math.PI) / 5 }
+        ]);
+        showToast('Applied Theme: Burning Solar Flare');
+        break;
+      case 'electric_jelly':
+        setGeneratorMode('ribbon');
+        setNumRibbons(4);
+        setThickness(160);
+        setWaveIntensity(90);
+        setWavePattern('sea_swell');
+        setWaveFrequency(1.2);
+        setTwistRate(1.9);
+        setTwistSpeed(2.2);
+        setSpeed(0.45);
+        setLightIntensity(1.15);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#00f2fe', colorEnd: '#09f783', twistPhase: 0 },
+          { id: 2, colorStart: '#00c6ff', colorEnd: '#0072ff', twistPhase: Math.PI / 4 },
+          { id: 3, colorStart: '#a8ff78', colorEnd: '#78ffd6', twistPhase: Math.PI / 2 },
+          { id: 4, colorStart: '#00f260', colorEnd: '#0575e6', twistPhase: (3 * Math.PI) / 4 }
+        ]);
+        showToast('Applied Theme: Bioluminescent Electric Jellyfish');
         break;
       case 'quantum_stardust':
         setGeneratorMode('mediamesh');
@@ -192,6 +586,24 @@ export default function SilkGenerator() {
         setChromaColorEnd('#ff00ff');
         showToast('Applied Theme: Digital Vaporwave Matrix');
         break;
+      case 'matrix_hack':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('ascii');
+        setColorProfile('neon');
+        setGridDensity(45);
+        setExtrusionDepth(110);
+        setParticleSize(4.0);
+        setMeshWaveScale(35);
+        setAsciiCharacterPalette('binary');
+        setContrastBoost(1.4);
+        setBrightnessThreshold(0.04);
+        setSpeed(0.45);
+        setChromaticAberration(0);
+        setIsTransparentBg(true);
+        setChromaColorStart('#00ff00');
+        setChromaColorEnd('#003300');
+        showToast('Applied Theme: Core Matrix Cascades');
+        break;
       case 'golden_satin':
         setGeneratorMode('mediamesh');
         setMeshStyle('topological_contour');
@@ -210,6 +622,61 @@ export default function SilkGenerator() {
         setChromaColorEnd('#cc9900');
         showToast('Applied Theme: Golden Contour Satin');
         break;
+      case 'kintsugi_gold':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('wireframe');
+        setColorProfile('chroma');
+        setGridDensity(52);
+        setExtrusionDepth(90);
+        setParticleSize(2.2);
+        setMeshWaveScale(22);
+        setContrastBoost(1.55);
+        setBrightnessThreshold(0.02);
+        setSpeed(0.3);
+        setChromaticAberration(1);
+        setIsTransparentBg(false);
+        setBackgroundColor('#050505');
+        setChromaColorStart('#d4af37');
+        setChromaColorEnd('#1a1a1a');
+        showToast('Applied Theme: Cracked Kintsugi Porcelain');
+        break;
+      case 'amethyst_res':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('topological_contour');
+        setColorProfile('chroma');
+        setGridDensity(48);
+        setExtrusionDepth(140);
+        setParticleSize(3.0);
+        setMeshWaveScale(30);
+        setContourLevels(18);
+        setContrastBoost(1.3);
+        setBrightnessThreshold(0.04);
+        setSpeed(0.38);
+        setChromaticAberration(4);
+        setIsTransparentBg(true);
+        setChromaColorStart('#9333ea');
+        setChromaColorEnd('#ec4899');
+        showToast('Applied Theme: Amethyst Crystal Contours');
+        break;
+      case 'mint_frost':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('plexus');
+        setColorProfile('chroma');
+        setGridDensity(44);
+        setExtrusionDepth(120);
+        setParticleSize(2.5);
+        setMeshWaveScale(25);
+        setPlexusMaxDistance(42);
+        setPlexusMaxConnections(4);
+        setContrastBoost(1.1);
+        setBrightnessThreshold(0.03);
+        setSpeed(0.28);
+        setChromaticAberration(3);
+        setIsTransparentBg(true);
+        setChromaColorStart('#2dd4bf');
+        setChromaColorEnd('#0284c7');
+        showToast('Applied Theme: Arctic Glacier Plexus');
+        break;
       case 'ethereal_aurora':
         setGeneratorMode('mediamesh');
         setMeshStyle('plexus');
@@ -227,6 +694,134 @@ export default function SilkGenerator() {
         setChromaColorStart('#00f0ff');
         setChromaColorEnd('#ff00aa');
         showToast('Applied Theme: Ethereal Aurora Constellations');
+        break;
+      case 'cherry_blossom':
+        setGeneratorMode('ribbon');
+        setNumRibbons(4);
+        setThickness(145);
+        setWaveIntensity(60);
+        setWavePattern('spiral');
+        setWaveFrequency(0.9);
+        setTwistRate(1.2);
+        setTwistSpeed(1.5);
+        setSpeed(0.35);
+        setLightIntensity(1.1);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#fbcfe8', colorEnd: '#f472b6', twistPhase: 0 },
+          { id: 2, colorStart: '#ffe4e6', colorEnd: '#fb7185', twistPhase: Math.PI / 4 },
+          { id: 3, colorStart: '#fff1f2', colorEnd: '#fda4af', twistPhase: Math.PI / 2 },
+          { id: 4, colorStart: '#fae8ff', colorEnd: '#f472b6', twistPhase: (3 * Math.PI) / 4 }
+        ]);
+        showToast('Applied Theme: Ethereal Sakura Whisper');
+        break;
+      case 'supernova_burst':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('plexus');
+        setColorProfile('chroma');
+        setGridDensity(54);
+        setExtrusionDepth(180);
+        setParticleSize(2.0);
+        setMeshWaveScale(45);
+        setPlexusMaxDistance(55);
+        setPlexusMaxConnections(6);
+        setContrastBoost(1.6);
+        setBrightnessThreshold(0.01);
+        setSpeed(0.6);
+        setChromaticAberration(10);
+        setIsTransparentBg(true);
+        setChromaColorStart('#e879f9');
+        setChromaColorEnd('#38bdf8');
+        showToast('Applied Theme: Celestial Supernova');
+        break;
+      case 'lava_lamp':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('stipple');
+        setColorProfile('chroma');
+        setGridDensity(46);
+        setExtrusionDepth(130);
+        setParticleSize(4.5);
+        setMeshWaveScale(40);
+        setContrastBoost(1.25);
+        setBrightnessThreshold(0.04);
+        setSpeed(0.32);
+        setChromaticAberration(4);
+        setIsTransparentBg(true);
+        setChromaColorStart('#ea580c');
+        setChromaColorEnd('#f43f5e');
+        showToast('Applied Theme: Volcanic Magma Spheres');
+        break;
+      case 'opal_aurora':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('plexus');
+        setColorProfile('chroma');
+        setGridDensity(46);
+        setExtrusionDepth(115);
+        setParticleSize(1.6);
+        setMeshWaveScale(35);
+        setPlexusMaxDistance(40);
+        setPlexusMaxConnections(4);
+        setContrastBoost(1.2);
+        setBrightnessThreshold(0.02);
+        setSpeed(0.35);
+        setChromaticAberration(6);
+        setIsTransparentBg(true);
+        setChromaColorStart('#ffedd5');
+        setChromaColorEnd('#a5f3fc');
+        showToast('Applied Theme: Pearlescent Opaline Halo');
+        break;
+      case 'neon_monolith':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('wireframe');
+        setColorProfile('chroma');
+        setGridDensity(35);
+        setExtrusionDepth(160);
+        setParticleSize(3.0);
+        setMeshWaveScale(20);
+        setContrastBoost(1.55);
+        setBrightnessThreshold(0.05);
+        setSpeed(0.42);
+        setChromaticAberration(2);
+        setIsTransparentBg(false);
+        setBackgroundColor('#18181b');
+        setChromaColorStart('#facc15');
+        setChromaColorEnd('#27272a');
+        showToast('Applied Theme: Hard Brutalist Monolith');
+        break;
+      case 'toxic_fallout':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('ascii');
+        setColorProfile('neon');
+        setGridDensity(42);
+        setExtrusionDepth(125);
+        setParticleSize(3.5);
+        setMeshWaveScale(40);
+        setAsciiCharacterPalette('symbols');
+        setContrastBoost(1.35);
+        setBrightnessThreshold(0.06);
+        setSpeed(0.5);
+        setChromaticAberration(5);
+        setIsTransparentBg(true);
+        setChromaColorStart('#a3e635');
+        setChromaColorEnd('#166534');
+        showToast('Applied Theme: Toxic Radioactive Fallout');
+        break;
+      case 'star_velocity':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('stipple');
+        setColorProfile('chroma');
+        setGridDensity(65);
+        setExtrusionDepth(180);
+        setParticleSize(2.2);
+        setMeshWaveScale(10);
+        setContrastBoost(1.4);
+        setBrightnessThreshold(0.02);
+        setSpeed(0.75);
+        setChromaticAberration(8);
+        setIsTransparentBg(true);
+        setChromaColorStart('#ffffff');
+        setChromaColorEnd('#1d4ed8');
+        showToast('Applied Theme: Warp Speed Hyperdrive');
         break;
       case 'cosmic_neon_ribbon':
         setGeneratorMode('ribbon');
@@ -247,6 +842,45 @@ export default function SilkGenerator() {
           { id: 4, colorStart: '#00f260', colorEnd: '#0575e6', twistPhase: Math.PI }
         ]);
         showToast('Applied Theme: Cosmic Neon Ribbons');
+        break;
+      case 'royal_velvet':
+        setGeneratorMode('ribbon');
+        setNumRibbons(5);
+        setThickness(155);
+        setWaveIntensity(75);
+        setWavePattern('satin');
+        setWaveFrequency(1.1);
+        setTwistRate(1.4);
+        setTwistSpeed(2.0);
+        setSpeed(0.3);
+        setLightIntensity(1.2);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#701a75', colorEnd: '#b45309', twistPhase: 0 },
+          { id: 2, colorStart: '#4a044e', colorEnd: '#d97706', twistPhase: Math.PI / 5 },
+          { id: 3, colorStart: '#3b0764', colorEnd: '#ea580c', twistPhase: (2 * Math.PI) / 5 },
+          { id: 4, colorStart: '#1e1b4b', colorEnd: '#f97316', twistPhase: (3 * Math.PI) / 5 },
+          { id: 5, colorStart: '#2e1065', colorEnd: '#f59e0b', twistPhase: (4 * Math.PI) / 5 }
+        ]);
+        showToast('Applied Theme: Royal Plum Satin Velvet');
+        break;
+      case 'liquid_chrome':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('topological_contour');
+        setColorProfile('chroma');
+        setGridDensity(54);
+        setExtrusionDepth(110);
+        setParticleSize(2.8);
+        setMeshWaveScale(45);
+        setContourLevels(22);
+        setContrastBoost(1.6);
+        setBrightnessThreshold(0.02);
+        setSpeed(0.45);
+        setChromaticAberration(3);
+        setIsTransparentBg(true);
+        setChromaColorStart('#f1f5f9');
+        setChromaColorEnd('#334155');
+        showToast('Applied Theme: Liquid Mercury Metal');
         break;
       case 'pastel_glass_ribbon':
         setGeneratorMode('ribbon');
@@ -291,6 +925,80 @@ export default function SilkGenerator() {
         ]);
         showToast('Applied Theme: Sunset Satin Ribbons');
         break;
+      case 'abyssal_trench':
+        setGeneratorMode('ribbon');
+        setNumRibbons(3);
+        setThickness(165);
+        setWaveIntensity(105);
+        setWavePattern('sea_swell');
+        setWaveFrequency(1.3);
+        setTwistRate(1.6);
+        setTwistSpeed(1.6);
+        setSpeed(0.25);
+        setLightIntensity(1.0);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#1e3a8a', colorEnd: '#10b981', twistPhase: 0 },
+          { id: 2, colorStart: '#172554', colorEnd: '#059669', twistPhase: Math.PI / 3 },
+          { id: 3, colorStart: '#0f172a', colorEnd: '#34d399', twistPhase: (2 * Math.PI) / 3 }
+        ]);
+        showToast('Applied Theme: Abyssal Biolum Filament');
+        break;
+      case 'iridescent_bubble':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('mesh');
+        setColorProfile('chroma');
+        setGridDensity(48);
+        setExtrusionDepth(120);
+        setParticleSize(3.0);
+        setMeshWaveScale(35);
+        setContrastBoost(1.3);
+        setBrightnessThreshold(0.02);
+        setSpeed(0.48);
+        setChromaticAberration(9);
+        setIsTransparentBg(true);
+        setChromaColorStart('#f472b6');
+        setChromaColorEnd('#38bdf8');
+        showToast('Applied Theme: Prismatic Bubble Surfaces');
+        break;
+      case 'digital_glitch_core':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('disintegrated_voxels');
+        setColorProfile('chroma');
+        setGridDensity(44);
+        setExtrusionDepth(150);
+        setParticleSize(3.5);
+        setMeshWaveScale(40);
+        setContrastBoost(1.4);
+        setBrightnessThreshold(0.03);
+        setSpeed(0.65);
+        setChromaticAberration(10);
+        setGlitchIntensity(8);
+        setIsTransparentBg(true);
+        setChromaColorStart('#a855f7');
+        setChromaColorEnd('#4ade80');
+        showToast('Applied Theme: Cybernetic Glitch Lattice');
+        break;
+      case 'dusty_rose':
+        setGeneratorMode('ribbon');
+        setNumRibbons(4);
+        setThickness(135);
+        setWaveIntensity(55);
+        setWavePattern('satin');
+        setWaveFrequency(0.8);
+        setTwistRate(1.1);
+        setTwistSpeed(1.3);
+        setSpeed(0.24);
+        setLightIntensity(0.9);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#fda4af', colorEnd: '#aa1f46', twistPhase: 0 },
+          { id: 2, colorStart: '#ffe4e6', colorEnd: '#9f1239', twistPhase: Math.PI / 4 },
+          { id: 3, colorStart: '#fecdd3', colorEnd: '#881337', twistPhase: Math.PI / 2 },
+          { id: 4, colorStart: '#fff1f2', colorEnd: '#aa1f46', twistPhase: (3 * Math.PI) / 4 }
+        ]);
+        showToast('Applied Theme: Vintage Damask Crimson');
+        break;
       case 'acid_emerald_ribbon':
         setGeneratorMode('ribbon');
         setNumRibbons(3);
@@ -327,9 +1035,909 @@ export default function SilkGenerator() {
         setChromaColorEnd('#2bd2ff');
         showToast('Applied Theme: Holographic Wireframe Pastels');
         break;
+      case 'hyper_grid_orange':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('wireframe');
+        setColorProfile('chroma');
+        setGridDensity(45);
+        setExtrusionDepth(140);
+        setParticleSize(1.5);
+        setMeshWaveScale(25);
+        setContrastBoost(1.3);
+        setBrightnessThreshold(0.03);
+        setSpeed(0.35);
+        setChromaticAberration(2);
+        setIsTransparentBg(true);
+        setChromaColorStart('#ff5500');
+        setChromaColorEnd('#1a0033');
+        showToast('Applied Theme: Orange Cyber Grid');
+        break;
+      case 'plasma_leak':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('stipple');
+        setColorProfile('chroma');
+        setGridDensity(55);
+        setExtrusionDepth(160);
+        setParticleSize(4.5);
+        setMeshWaveScale(30);
+        setContrastBoost(1.55);
+        setBrightnessThreshold(0.02);
+        setSpeed(0.5);
+        setChromaticAberration(5);
+        setIsTransparentBg(false);
+        setBackgroundColor('#022c22');
+        setChromaColorStart('#d9f99d');
+        setChromaColorEnd('#059669');
+        showToast('Applied Theme: Plasma Radiation Leak');
+        break;
+      case 'glacial_mesh':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('mesh');
+        setColorProfile('chroma');
+        setGridDensity(50);
+        setExtrusionDepth(120);
+        setParticleSize(2.8);
+        setMeshWaveScale(20);
+        setContrastBoost(1.2);
+        setBrightnessThreshold(0.01);
+        setSpeed(0.2);
+        setChromaticAberration(3);
+        setIsTransparentBg(true);
+        setChromaColorStart('#e0f2fe');
+        setChromaColorEnd('#0284c7');
+        showToast('Applied Theme: Glacial Crystal Mesh');
+        break;
+      case 'binary_waterfall':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('ascii');
+        setColorProfile('neon');
+        setGridDensity(50);
+        setExtrusionDepth(130);
+        setParticleSize(3.5);
+        setMeshWaveScale(35);
+        setAsciiCharacterPalette('binary');
+        setContrastBoost(1.4);
+        setBrightnessThreshold(0.04);
+        setSpeed(0.55);
+        setChromaticAberration(0);
+        setIsTransparentBg(true);
+        setChromaColorStart('#00f0ff');
+        setChromaColorEnd('#003333');
+        showToast('Applied Theme: Binary Code Cascade');
+        break;
+      case 'nebula_plexus':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('plexus');
+        setColorProfile('chroma');
+        setGridDensity(52);
+        setExtrusionDepth(150);
+        setParticleSize(1.8);
+        setMeshWaveScale(28);
+        setPlexusMaxDistance(48);
+        setPlexusMaxConnections(5);
+        setContrastBoost(1.35);
+        setBrightnessThreshold(0.02);
+        setSpeed(0.3);
+        setChromaticAberration(6);
+        setIsTransparentBg(true);
+        setChromaColorStart('#f472b6');
+        setChromaColorEnd('#818cf8');
+        showToast('Applied Theme: Orion Nebula Nexus');
+        break;
+      case 'magma_wire':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('wireframe');
+        setColorProfile('chroma');
+        setGridDensity(42);
+        setExtrusionDepth(180);
+        setParticleSize(2.2);
+        setMeshWaveScale(35);
+        setContrastBoost(1.5);
+        setBrightnessThreshold(0.03);
+        setSpeed(0.4);
+        setChromaticAberration(5);
+        setIsTransparentBg(false);
+        setBackgroundColor('#1c0a0a');
+        setChromaColorStart('#f97316');
+        setChromaColorEnd('#7f1d1d');
+        showToast('Applied Theme: Tectonic Magma Fissure');
+        break;
+      case 'copper_sheet':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('topological_contour');
+        setColorProfile('chroma');
+        setGridDensity(40);
+        setExtrusionDepth(100);
+        setParticleSize(3.0);
+        setMeshWaveScale(25);
+        setContourLevels(15);
+        setContrastBoost(1.25);
+        setBrightnessThreshold(0.04);
+        setSpeed(0.28);
+        setChromaticAberration(2);
+        setIsTransparentBg(true);
+        setChromaColorStart('#b45309');
+        setChromaColorEnd('#0f766e');
+        showToast('Applied Theme: Oxidized Amber Foil');
+        break;
+      case 'hologram_scan':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('stipple');
+        setColorProfile('chroma');
+        setGridDensity(60);
+        setExtrusionDepth(130);
+        setParticleSize(3.2);
+        setMeshWaveScale(40);
+        setContrastBoost(1.45);
+        setBrightnessThreshold(0.01);
+        setSpeed(0.5);
+        setChromaticAberration(8);
+        setIsTransparentBg(true);
+        setChromaColorStart('#fa8bff');
+        setChromaColorEnd('#2bd2ff');
+        showToast('Applied Theme: Holographic LIDAR Scan');
+        break;
+      case 'sublime_slime':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('disintegrated_voxels');
+        setColorProfile('chroma');
+        setGridDensity(45);
+        setExtrusionDepth(140);
+        setParticleSize(3.5);
+        setMeshWaveScale(30);
+        setContrastBoost(1.3);
+        setBrightnessThreshold(0.04);
+        setSpeed(0.5);
+        setChromaticAberration(4);
+        setIsTransparentBg(true);
+        setChromaColorStart('#bef264');
+        setChromaColorEnd('#0369a1');
+        showToast('Applied Theme: Sublime Acid Ripple');
+        break;
+      case 'ghostly_apparition':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('mesh');
+        setColorProfile('chroma');
+        setGridDensity(48);
+        setExtrusionDepth(110);
+        setParticleSize(2.5);
+        setMeshWaveScale(22);
+        setContrastBoost(1.15);
+        setBrightnessThreshold(0.02);
+        setSpeed(0.15);
+        setChromaticAberration(5);
+        setIsTransparentBg(true);
+        setChromaColorStart('#ccfbf1');
+        setChromaColorEnd('#5b21b6');
+        showToast('Applied Theme: Ectoplasmic Vapor Map');
+        break;
+      case 'digital_monochrome':
+        setGeneratorMode('mediamesh');
+        setMeshStyle('stipple');
+        setColorProfile('chroma');
+        setGridDensity(50);
+        setExtrusionDepth(120);
+        setParticleSize(3.0);
+        setMeshWaveScale(15);
+        setContrastBoost(1.75);
+        setBrightnessThreshold(0.01);
+        setSpeed(0.35);
+        setChromaticAberration(0);
+        setIsTransparentBg(false);
+        setBackgroundColor('#000000');
+        setChromaColorStart('#ffffff');
+        setChromaColorEnd('#000000');
+        showToast('Applied Theme: Brutalist Obsidian Matrix');
+        break;
+      case 'celestial_silk':
+        setGeneratorMode('ribbon');
+        setNumRibbons(4);
+        setThickness(140);
+        setWaveIntensity(70);
+        setWavePattern('satin');
+        setWaveFrequency(0.85);
+        setTwistRate(1.2);
+        setTwistSpeed(1.8);
+        setSpeed(0.3);
+        setLightIntensity(1.15);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#38bdf8', colorEnd: '#22d3ee', twistPhase: 0 },
+          { id: 2, colorStart: '#818cf8', colorEnd: '#a78bfa', twistPhase: Math.PI / 4 },
+          { id: 3, colorStart: '#06b6d4', colorEnd: '#0891b2', twistPhase: Math.PI / 2 },
+          { id: 4, colorStart: '#6366f1', colorEnd: '#4f46e5', twistPhase: (3 * Math.PI) / 4 }
+        ]);
+        showToast('Applied Theme: Celestial Silk Constellations');
+        break;
+      case 'phoenix_ashes':
+        setGeneratorMode('ribbon');
+        setNumRibbons(3);
+        setThickness(150);
+        setWaveIntensity(80);
+        setWavePattern('turbulent');
+        setWaveFrequency(1.1);
+        setTwistRate(2.0);
+        setTwistSpeed(2.5);
+        setSpeed(0.4);
+        setLightIntensity(1.3);
+        setIsTransparentBg(false);
+        setBackgroundColor('#111113');
+        setRibbons([
+          { id: 1, colorStart: '#f97316', colorEnd: '#1e1b4b', twistPhase: 0 },
+          { id: 2, colorStart: '#ef4444', colorEnd: '#111827', twistPhase: Math.PI / 3 },
+          { id: 3, colorStart: '#ff003c', colorEnd: '#111113', twistPhase: (2 * Math.PI) / 3 }
+        ]);
+        showToast('Applied Theme: Phoenix Obsidian Fire');
+        break;
+      case 'northern_dance':
+        setGeneratorMode('ribbon');
+        setNumRibbons(4);
+        setThickness(155);
+        setWaveIntensity(85);
+        setWavePattern('sea_swell');
+        setWaveFrequency(0.95);
+        setTwistRate(1.3);
+        setTwistSpeed(1.6);
+        setSpeed(0.28);
+        setLightIntensity(1.2);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#10b981', colorEnd: '#06b6d4', twistPhase: 0 },
+          { id: 2, colorStart: '#34d399', colorEnd: '#3b82f6', twistPhase: Math.PI / 4 },
+          { id: 3, colorStart: '#059669', colorEnd: '#0284c7', twistPhase: Math.PI / 2 },
+          { id: 4, colorStart: '#0284c7', colorEnd: '#1d4ed8', twistPhase: (3 * Math.PI) / 4 }
+        ]);
+        showToast('Applied Theme: Aurora Borealis Ribbon');
+        break;
+      case 'ocean_depths':
+        setGeneratorMode('ribbon');
+        setNumRibbons(5);
+        setThickness(165);
+        setWaveIntensity(95);
+        setWavePattern('sea_swell');
+        setWaveFrequency(0.8);
+        setTwistRate(1.2);
+        setTwistSpeed(1.4);
+        setSpeed(0.2);
+        setLightIntensity(1.0);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#1d4ed8', colorEnd: '#0f172a', twistPhase: 0 },
+          { id: 2, colorStart: '#014f86', colorEnd: '#1e3a8a', twistPhase: Math.PI / 5 },
+          { id: 3, colorStart: '#1e40af', colorEnd: '#0f172a', twistPhase: (2 * Math.PI) / 5 },
+          { id: 4, colorStart: '#3b82f6', colorEnd: '#1d4ed8', twistPhase: (3 * Math.PI) / 5 },
+          { id: 5, colorStart: '#2563eb', colorEnd: '#1e3a8a', twistPhase: (4 * Math.PI) / 5 }
+        ]);
+        showToast('Applied Theme: Deep Pacific Silk');
+        break;
+      case 'golden_hour':
+        setGeneratorMode('ribbon');
+        setNumRibbons(3);
+        setThickness(145);
+        setWaveIntensity(90);
+        setWavePattern('satin');
+        setWaveFrequency(1.0);
+        setTwistRate(1.1);
+        setTwistSpeed(1.5);
+        setSpeed(0.3);
+        setLightIntensity(1.25);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#fbbf24', colorEnd: '#f59e0b', twistPhase: 0 },
+          { id: 2, colorStart: '#fcd34d', colorEnd: '#d97706', twistPhase: Math.PI / 3 },
+          { id: 3, colorStart: '#f59e0b', colorEnd: '#ca8a04', twistPhase: (2 * Math.PI) / 3 }
+        ]);
+        showToast('Applied Theme: Golden Hour Satin');
+        break;
+      case 'cyber_pulse':
+        setGeneratorMode('ribbon');
+        setNumRibbons(4);
+        setThickness(130);
+        setWaveIntensity(100);
+        setWavePattern('spiral');
+        setWaveFrequency(1.4);
+        setTwistRate(2.2);
+        setTwistSpeed(3.0);
+        setSpeed(0.5);
+        setLightIntensity(1.4);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#ff007f', colorEnd: '#39ff14', twistPhase: 0 },
+          { id: 2, colorStart: '#00f0ff', colorEnd: '#7a00ff', twistPhase: Math.PI / 4 },
+          { id: 3, colorStart: '#ffef00', colorEnd: '#ff007f', twistPhase: Math.PI / 2 },
+          { id: 4, colorStart: '#39ff14', colorEnd: '#00ffff', twistPhase: (3 * Math.PI) / 4 }
+        ]);
+        showToast('Applied Theme: Tokyo Cyber Grid Pulse');
+        break;
+      case 'bubblegum_dream':
+        setGeneratorMode('ribbon');
+        setNumRibbons(5);
+        setThickness(140);
+        setWaveIntensity(75);
+        setWavePattern('satin');
+        setWaveFrequency(0.8);
+        setTwistRate(1.1);
+        setTwistSpeed(1.3);
+        setSpeed(0.25);
+        setLightIntensity(1.1);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#f472b6', colorEnd: '#fbcfe8', twistPhase: 0 },
+          { id: 2, colorStart: '#c084fc', colorEnd: '#e9d5ff', twistPhase: Math.PI / 5 },
+          { id: 3, colorStart: '#fb7185', colorEnd: '#fff1f2', twistPhase: (2 * Math.PI) / 5 },
+          { id: 4, colorStart: '#f472b6', colorEnd: '#fecdd3', twistPhase: (3 * Math.PI) / 5 },
+          { id: 5, colorStart: '#a78bfa', colorEnd: '#c084fc', twistPhase: (4 * Math.PI) / 5 }
+        ]);
+        showToast('Applied Theme: Bubblegum Pastel Stream');
+        break;
+      case 'lavender_mist':
+        setGeneratorMode('ribbon');
+        setNumRibbons(3);
+        setThickness(135);
+        setWaveIntensity(70);
+        setWavePattern('satin');
+        setWaveFrequency(0.75);
+        setTwistRate(1.0);
+        setTwistSpeed(1.2);
+        setSpeed(0.22);
+        setLightIntensity(1.0);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#c084fc', colorEnd: '#818cf8', twistPhase: 0 },
+          { id: 2, colorStart: '#e9d5ff', colorEnd: '#c1c9ff', twistPhase: Math.PI / 3 },
+          { id: 3, colorStart: '#a78bfa', colorEnd: '#6366f1', twistPhase: (2 * Math.PI) / 3 }
+        ]);
+        showToast('Applied Theme: Ethereal Lavender Sleep');
+        break;
+      case 'magma_core':
+        setGeneratorMode('ribbon');
+        setNumRibbons(4);
+        setThickness(150);
+        setWaveIntensity(95);
+        setWavePattern('turbulent');
+        setWaveFrequency(1.25);
+        setTwistRate(1.8);
+        setTwistSpeed(2.4);
+        setSpeed(0.42);
+        setLightIntensity(1.3);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#ea580c', colorEnd: '#ff003c', twistPhase: 0 },
+          { id: 2, colorStart: '#ea580c', colorEnd: '#f43f5e', twistPhase: Math.PI / 4 },
+          { id: 3, colorStart: '#ff4500', colorEnd: '#3f0011', twistPhase: Math.PI / 2 },
+          { id: 4, colorStart: '#d84315', colorEnd: '#ff4500', twistPhase: (3 * Math.PI) / 4 }
+        ]);
+        showToast('Applied Theme: Viscous Lava Stream');
+        break;
+      case 'sand_dune':
+        setGeneratorMode('ribbon');
+        setNumRibbons(3);
+        setThickness(145);
+        setWaveIntensity(80);
+        setWavePattern('satin');
+        setWaveFrequency(0.85);
+        setTwistRate(1.1);
+        setTwistSpeed(1.4);
+        setSpeed(0.24);
+        setLightIntensity(1.1);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#f59e0b', colorEnd: '#78350f', twistPhase: 0 },
+          { id: 2, colorStart: '#fbbf24', colorEnd: '#451a03', twistPhase: Math.PI / 3 },
+          { id: 3, colorStart: '#d97706', colorEnd: '#78350f', twistPhase: (2 * Math.PI) / 3 }
+        ]);
+        showToast('Applied Theme: Sahara Silk Ripple');
+        break;
+      case 'ice_cavern':
+        setGeneratorMode('ribbon');
+        setNumRibbons(4);
+        setThickness(150);
+        setWaveIntensity(85);
+        setWavePattern('sea_swell');
+        setWaveFrequency(1.0);
+        setTwistRate(1.4);
+        setTwistSpeed(1.8);
+        setSpeed(0.32);
+        setLightIntensity(1.2);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#06b6d4', colorEnd: '#0891b2', twistPhase: 0 },
+          { id: 2, colorStart: '#67e8f9', colorEnd: '#1e40af', twistPhase: Math.PI / 4 },
+          { id: 3, colorStart: '#22d3ee', colorEnd: '#0369a1', twistPhase: Math.PI / 2 },
+          { id: 4, colorStart: '#00f2fe', colorEnd: '#09f783', twistPhase: (3 * Math.PI) / 4 }
+        ]);
+        showToast('Applied Theme: Glacial Fjord Stream');
+        break;
+      case 'monotech':
+        setGeneratorMode('ribbon');
+        setNumRibbons(3);
+        setThickness(130);
+        setWaveIntensity(75);
+        setWavePattern('satin');
+        setWaveFrequency(0.8);
+        setTwistRate(1.0);
+        setTwistSpeed(1.2);
+        setSpeed(0.25);
+        setLightIntensity(1.0);
+        setIsTransparentBg(false);
+        setBackgroundColor('#000000');
+        setRibbons([
+          { id: 1, colorStart: '#ffffff', colorEnd: '#475569', twistPhase: 0 },
+          { id: 2, colorStart: '#cbd5e1', colorEnd: '#1e293b', twistPhase: Math.PI / 3 },
+          { id: 3, colorStart: '#94a3b8', colorEnd: '#0f172a', twistPhase: (2 * Math.PI) / 3 }
+        ]);
+        showToast('Applied Theme: Sleek Minimal Slate');
+        break;
+      case 'autumn_canopy':
+        setGeneratorMode('ribbon');
+        setNumRibbons(4);
+        setThickness(140);
+        setWaveIntensity(85);
+        setWavePattern('satin');
+        setWaveFrequency(0.9);
+        setTwistRate(1.2);
+        setTwistSpeed(1.4);
+        setSpeed(0.26);
+        setLightIntensity(1.15);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#b45309', colorEnd: '#78350f', twistPhase: 0 },
+          { id: 2, colorStart: '#f97316', colorEnd: '#9a3412', twistPhase: Math.PI / 4 },
+          { id: 3, colorStart: '#ea580c', colorEnd: '#78350f', twistPhase: Math.PI / 2 },
+          { id: 4, colorStart: '#fbbf24', colorEnd: '#f97316', twistPhase: (3 * Math.PI) / 4 }
+        ]);
+        showToast('Applied Theme: October Autumn Woods');
+        break;
+      case 'toxic_sludge':
+        setGeneratorMode('ribbon');
+        setNumRibbons(3);
+        setThickness(145);
+        setWaveIntensity(90);
+        setWavePattern('sea_swell');
+        setWaveFrequency(1.1);
+        setTwistRate(1.6);
+        setTwistSpeed(2.0);
+        setSpeed(0.35);
+        setLightIntensity(1.2);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#a3e635', colorEnd: '#166534', twistPhase: 0 },
+          { id: 2, colorStart: '#84cc16', colorEnd: '#14532d', twistPhase: Math.PI / 3 },
+          { id: 3, colorStart: '#65a30d', colorEnd: '#022c22', twistPhase: (2 * Math.PI) / 3 }
+        ]);
+        showToast('Applied Theme: Nuclear Acid Stream');
+        break;
+      case 'unicorn_tear':
+        setGeneratorMode('ribbon');
+        setNumRibbons(5);
+        setThickness(140);
+        setWaveIntensity(80);
+        setWavePattern('satin');
+        setWaveFrequency(0.85);
+        setTwistRate(1.15);
+        setTwistSpeed(1.4);
+        setSpeed(0.27);
+        setLightIntensity(1.1);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#f472b6', colorEnd: '#a5f3fc', twistPhase: 0 },
+          { id: 2, colorStart: '#fbcfe8', colorEnd: '#cbd5e1', twistPhase: Math.PI / 5 },
+          { id: 3, colorStart: '#ffe4e6', colorEnd: '#bae6fd', twistPhase: (2 * Math.PI) / 5 },
+          { id: 4, colorStart: '#fae8ff', colorEnd: '#f472b6', twistPhase: (3 * Math.PI) / 5 },
+          { id: 5, colorStart: '#fbcfe8', colorEnd: '#38bdf8', twistPhase: (4 * Math.PI) / 5 }
+        ]);
+        showToast('Applied Theme: Iridescent Unicorn Veil');
+        break;
+      case 'crimson_tide':
+        setGeneratorMode('ribbon');
+        setNumRibbons(4);
+        setThickness(155);
+        setWaveIntensity(95);
+        setWavePattern('sea_swell');
+        setWaveFrequency(1.0);
+        setTwistRate(1.4);
+        setTwistSpeed(1.6);
+        setSpeed(0.23);
+        setLightIntensity(1.05);
+        setIsTransparentBg(false);
+        setBackgroundColor('#050103');
+        setRibbons([
+          { id: 1, colorStart: '#9f1239', colorEnd: '#3f0712', twistPhase: 0 },
+          { id: 2, colorStart: '#f43f5e', colorEnd: '#000000', twistPhase: Math.PI / 4 },
+          { id: 3, colorStart: '#881337', colorEnd: '#000000', twistPhase: Math.PI / 2 },
+          { id: 4, colorStart: '#e11d48', colorEnd: '#4c0519', twistPhase: (3 * Math.PI) / 4 }
+        ]);
+        showToast('Applied Theme: Royal Vampire Velvet');
+        break;
+      case 'electric_violet':
+        setGeneratorMode('ribbon');
+        setNumRibbons(3);
+        setThickness(135);
+        setWaveIntensity(105);
+        setWavePattern('spiral');
+        setWaveFrequency(1.45);
+        setTwistRate(2.4);
+        setTwistSpeed(3.2);
+        setSpeed(0.48);
+        setLightIntensity(1.35);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#8b5cf6', colorEnd: '#a78bfa', twistPhase: 0 },
+          { id: 2, colorStart: '#7c3aed', colorEnd: '#c084fc', twistPhase: Math.PI / 3 },
+          { id: 3, colorStart: '#a855f7', colorEnd: '#cbd5e1', twistPhase: (2 * Math.PI) / 3 }
+        ]);
+        showToast('Applied Theme: Electric Arc Discharge');
+        break;
+      case 'emerald_forest':
+        setGeneratorMode('ribbon');
+        setNumRibbons(4);
+        setThickness(145);
+        setWaveIntensity(75);
+        setWavePattern('satin');
+        setWaveFrequency(0.8);
+        setTwistRate(1.1);
+        setTwistSpeed(1.3);
+        setSpeed(0.25);
+        setLightIntensity(1.1);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#059669', colorEnd: '#064e3b', twistPhase: 0 },
+          { id: 2, colorStart: '#10b981', colorEnd: '#022c22', twistPhase: Math.PI / 4 },
+          { id: 3, colorStart: '#047857', colorEnd: '#064e3b', twistPhase: Math.PI / 2 },
+          { id: 4, colorStart: '#34d399', colorEnd: '#022c22', twistPhase: (3 * Math.PI) / 4 }
+        ]);
+        showToast('Applied Theme: Amazonian Canopy Silk');
+        break;
+      case 'champagne_gold':
+        setGeneratorMode('ribbon');
+        setNumRibbons(3);
+        setThickness(140);
+        setWaveIntensity(80);
+        setWavePattern('satin');
+        setWaveFrequency(0.9);
+        setTwistRate(1.15);
+        setTwistSpeed(1.4);
+        setSpeed(0.26);
+        setLightIntensity(1.2);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#fef08a', colorEnd: '#ca8a04', twistPhase: 0 },
+          { id: 2, colorStart: '#fef9c3', colorEnd: '#ca8a04', twistPhase: Math.PI / 3 },
+          { id: 3, colorStart: '#fef08a', colorEnd: '#854d0e', twistPhase: (2 * Math.PI) / 3 }
+        ]);
+        showToast('Applied Theme: VIP Champagne Pearl');
+        break;
+      case 'space_dust':
+        setGeneratorMode('ribbon');
+        setNumRibbons(5);
+        setThickness(135);
+        setWaveIntensity(100);
+        setWavePattern('turbulent');
+        setWaveFrequency(1.3);
+        setTwistRate(1.9);
+        setTwistSpeed(2.6);
+        setSpeed(0.45);
+        setLightIntensity(1.25);
+        setIsTransparentBg(true);
+        setRibbons([
+          { id: 1, colorStart: '#ec4899', colorEnd: '#1d4ed8', twistPhase: 0 },
+          { id: 2, colorStart: '#a855f7', colorEnd: '#047857', twistPhase: Math.PI / 5 },
+          { id: 3, colorStart: '#db2777', colorEnd: '#4f46e5', twistPhase: (2 * Math.PI) / 5 },
+          { id: 4, colorStart: '#8b5cf6', colorEnd: '#ef4444', twistPhase: (3 * Math.PI) / 5 },
+          { id: 5, colorStart: '#ec4899', colorEnd: '#f97316', twistPhase: (4 * Math.PI) / 5 }
+        ]);
+        showToast('Applied Theme: Cosmic Starlight Stream');
+        break;
       default:
         break;
     }
+  };
+
+  const selectGeometryFilter = (gStyle: GeometryFilterItem) => {
+    setActiveGeometryFilter(gStyle.id);
+    setMeshStyle(gStyle.style);
+    
+    switch (gStyle.id) {
+      // --- Plexus Group ---
+      case 'plexus_classic':
+        setPlexusMaxDistance(38);
+        setPlexusMaxConnections(4);
+        setParticleSize(2.2);
+        setGridDensity(48);
+        setSpeed(0.35);
+        setColorProfile('chroma');
+        setChromaColorStart('#00f0ff'); // Vibrant Cyan
+        setChromaColorEnd('#7a00ff');   // Neon Purple
+        setExtrusionDepth(120);
+        setChromaticAberration(4);
+        setMeshWaveScale(22);
+        break;
+      case 'plexus_constellation':
+        setPlexusMaxDistance(58);
+        setPlexusMaxConnections(3);
+        setParticleSize(1.2);
+        setGridDensity(35);
+        setSpeed(0.15); // Slow cosmic float
+        setColorProfile('chroma');
+        setChromaColorStart('#e0f2fe'); // Pastel Icy White
+        setChromaColorEnd('#0369a1');   // Cosmic Dark Blue
+        setExtrusionDepth(170);         // Tall vertical clusters
+        setChromaticAberration(2);
+        setMeshWaveScale(15);
+        break;
+      case 'plexus_lattice':
+        setPlexusMaxDistance(30);
+        setPlexusMaxConnections(8);
+        setParticleSize(2.0);
+        setGridDensity(52);
+        setSpeed(0.5);  // High energy electric web
+        setColorProfile('chroma');
+        setChromaColorStart('#39ff14'); // Cyber Lime Green
+        setChromaColorEnd('#0f172a');   // Silent Midnight Slate
+        setExtrusionDepth(80);          // Flattened lattice mesh
+        setChromaticAberration(6);
+        setMeshWaveScale(30);
+        break;
+        
+      // --- Stipple Group ---
+      case 'stipple_classic':
+        setParticleSize(3.2);
+        setGridDensity(50);
+        setSpeed(0.4);
+        setColorProfile('chroma');
+        setChromaColorStart('#f43f5e'); // Energetic Rose Pink
+        setChromaColorEnd('#1e1b4b');   // Midnight Indigo
+        setExtrusionDepth(110);
+        setChromaticAberration(3);
+        setMeshWaveScale(25);
+        break;
+      case 'stipple_micro':
+        setParticleSize(1.4); // Stardust grain texture
+        setGridDensity(68);   // Ultra dense
+        setSpeed(0.25);
+        setColorProfile('chroma');
+        setChromaColorStart('#ec4899'); // Hot Pink
+        setChromaColorEnd('#3b82f6');   // Electric Blue
+        setExtrusionDepth(140);
+        setChromaticAberration(8);      // Retro chromatic shift
+        setMeshWaveScale(18);
+        break;
+      case 'stipple_giant':
+        setParticleSize(6.5); // Thick fluid ink globs
+        setGridDensity(38);
+        setSpeed(0.55);
+        setColorProfile('chroma');
+        setChromaColorStart('#fbbf24'); // Luminous Amber
+        setChromaColorEnd('#ff4500');   // Deep molten orange flame
+        setExtrusionDepth(95);
+        setChromaticAberration(0);
+        setMeshWaveScale(35);
+        setParticleDecaySpeed(1.8);
+        break;
+        
+      // --- ASCII Group ---
+      case 'ascii_binary':
+        setAsciiCharacterPalette('binary');
+        setGridDensity(44);
+        setParticleSize(3.6);
+        setSpeed(0.5); // Cascading waterfall effect
+        setColorProfile('neon');
+        setChromaColorStart('#00f260'); // Matrix Green Glow
+        setChromaColorEnd('#0575e6');   // Ocean Depths Blue
+        setExtrusionDepth(130);
+        setChromaticAberration(1);
+        setMeshWaveScale(40);
+        break;
+      case 'ascii_matrix':
+        setAsciiCharacterPalette('matrix');
+        setParticleSize(2.8);
+        setGridDensity(50);
+        setSpeed(0.35);
+        setColorProfile('chroma');
+        setChromaColorStart('#00ff00'); // Phosphor Retro Terminal Green
+        setChromaColorEnd('#001100');   // Dark Obsidian
+        setExtrusionDepth(100);
+        setChromaticAberration(0);
+        setMeshWaveScale(20);
+        break;
+      case 'ascii_hex':
+        setAsciiCharacterPalette('symbols');
+        setParticleSize(3.2);
+        setGridDensity(42);
+        setSpeed(0.6); // Swift hexadecimal system decryptor
+        setColorProfile('chroma');
+        setChromaColorStart('#a855f7'); // Cyber Amethyst Purple
+        setChromaColorEnd('#1e1b4b');   // Cosmic Void Space
+        setExtrusionDepth(155);
+        setChromaticAberration(5);
+        setMeshWaveScale(28);
+        break;
+        
+      // --- Contour Group ---
+      case 'contour_classic':
+        setContourLevels(11);
+        setParticleSize(2.8);
+        setGridDensity(45);
+        setSpeed(0.3);
+        setColorProfile('chroma');
+        setChromaColorStart('#d4af37'); // Luxury Polished Gold
+        setChromaColorEnd('#111827');   // Cosmic Dark Graphite
+        setExtrusionDepth(120);
+        setChromaticAberration(2);
+        setMeshWaveScale(25);
+        break;
+      case 'contour_wave':
+        setContourLevels(22); // Fine elevation micro-lines
+        setParticleSize(1.4);
+        setGridDensity(52);
+        setSpeed(0.22);
+        setColorProfile('chroma');
+        setChromaColorStart('#fbcfe8'); // Pale Sakura Bloom Pink
+        setChromaColorEnd('#cbd5e1');   // Metallic Liquid Silver
+        setExtrusionDepth(80);
+        setChromaticAberration(3);
+        setMeshWaveScale(18);
+        break;
+      case 'contour_heat':
+        setContourLevels(6); // Chunky thermal steps
+        setParticleSize(4.5);
+        setGridDensity(38);
+        setSpeed(0.45);
+        setColorProfile('chroma');
+        setChromaColorStart('#f97316'); // Volcano Heat Orange
+        setChromaColorEnd('#1d4ed8');   // Frigid Antarctic Cobalt
+        setExtrusionDepth(175);
+        setChromaticAberration(7);
+        setMeshWaveScale(33);
+        break;
+        
+      // --- Disintegrated Voxels Group ---
+      case 'sand_decay':
+        setParticleDecaySpeed(2.2);
+        setParticleSize(3.0);
+        setGridDensity(46);
+        setSpeed(0.38);
+        setColorProfile('chroma');
+        setChromaColorStart('#fb923c'); // Sunset Desert Sand
+        setChromaColorEnd('#431407');   // Burnt Sienna Clay
+        setExtrusionDepth(130);
+        setChromaticAberration(4);
+        setMeshWaveScale(24);
+        break;
+      case 'voxel_torrent':
+        setParticleDecaySpeed(4.8); // High speed terminal code drop
+        setParticleSize(4.5);
+        setGridDensity(52);
+        setSpeed(0.65);
+        setColorProfile('chroma');
+        setChromaColorStart('#06b6d4'); // High-voltage cyan spark
+        setChromaColorEnd('#0f172a');   // Obsidian data bank
+        setExtrusionDepth(160);
+        setChromaticAberration(9);      // Heavy scanline digital glitch
+        setMeshWaveScale(45);
+        break;
+      case 'voxel_heavy':
+        setParticleDecaySpeed(1.0); // Slow ash debris
+        setParticleSize(5.5);
+        setGridDensity(36);
+        setSpeed(0.18);
+        setColorProfile('chroma');
+        setChromaColorStart('#94a3b8'); // Metallic Charcoal Platinum
+        setChromaColorEnd('#030712');   // Deep Space Abyss
+        setExtrusionDepth(90);
+        setChromaticAberration(2);
+        setMeshWaveScale(15);
+        break;
+        
+      // --- Points Group ---
+      case 'points_classic':
+        setParticleSize(3.4);
+        setGridDensity(46);
+        setSpeed(0.35);
+        setColorProfile('chroma');
+        setChromaColorStart('#60a5fa'); // Heavenly Sky Blue
+        setChromaColorEnd('#1e3a8a');   // Midnight Deep Navy
+        setExtrusionDepth(120);
+        setChromaticAberration(1);
+        setMeshWaveScale(22);
+        break;
+      case 'points_soft':
+        setParticleSize(1.0); // Mist density cloud
+        setGridDensity(75);   // High resolution points
+        setSpeed(0.2);
+        setColorProfile('chroma');
+        setChromaColorStart('#c084fc'); // Magic Lavender Purple
+        setChromaColorEnd('#f472b6');   // Orion Rose Dust
+        setExtrusionDepth(190);
+        setChromaticAberration(5);
+        setMeshWaveScale(12);
+        break;
+      case 'points_glitched':
+        setParticleSize(4.0);
+        setGridDensity(38);
+        setSpeed(0.5);
+        setColorProfile('chroma');
+        setChromaColorStart('#ff0055'); // Hot Electric Magenta
+        setChromaColorEnd('#00ffaa');   // Toxic Cyber Turquoise
+        setExtrusionDepth(140);
+        setChromaticAberration(12);     // Maximum prism-splitter glitch
+        setMeshWaveScale(38);
+        break;
+        
+      // --- Wireframe Group ---
+      case 'wireframe_grid':
+        setParticleSize(1.8);
+        setGridDensity(38);
+        setSpeed(0.3);
+        setColorProfile('chroma');
+        setChromaColorStart('#2dd2ff'); // Holographic Lightway Blue
+        setChromaColorEnd('#042f2e');   // Luminous Dark Cyan
+        setExtrusionDepth(110);
+        setChromaticAberration(2);
+        setMeshWaveScale(20);
+        break;
+      case 'wireframe_dense':
+        setParticleSize(1.0); // Blueprint pen stroke weight
+        setGridDensity(65);   // Extremely high blueprint grid
+        setSpeed(0.12);
+        setColorProfile('chroma');
+        setChromaColorStart('#cbd5e1'); // Bright drawing board silver
+        setChromaColorEnd('#334155');   // Industrial Carbon Graphite
+        setExtrusionDepth(180);
+        setChromaticAberration(0);
+        setMeshWaveScale(10);
+        break;
+      case 'wireframe_wave':
+        setParticleSize(2.2);
+        setGridDensity(48);
+        setSpeed(0.55);
+        setColorProfile('chroma');
+        setChromaColorStart('#ff5500'); // Burnished copper orange
+        setChromaColorEnd('#1e1b4b');   // Darkest cosmic purple
+        setExtrusionDepth(145);
+        setChromaticAberration(6);
+        setMeshWaveScale(42);
+        break;
+        
+      // --- Mesh Group ---
+      case 'mesh_shaded':
+        setGridDensity(38);
+        setSpeed(0.32);
+        setColorProfile('chroma');
+        setChromaColorStart('#a3e635'); // Acid lime shade
+        setChromaColorEnd('#064e3b');   // Jungle shadow canopy
+        setExtrusionDepth(115);
+        setChromaticAberration(3);
+        setMeshWaveScale(22);
+        setParticleSize(3.0);
+        break;
+      case 'mesh_shiny':
+        setGridDensity(44);
+        setSpeed(0.45);
+        setColorProfile('chroma');
+        setChromaColorStart('#fa8bff'); // Rainbow Opal Lustre
+        setChromaColorEnd('#2bd2ff');   // Metallic Sky Chrome
+        setExtrusionDepth(135);
+        setChromaticAberration(8);      // High glass refraction
+        setMeshWaveScale(28);
+        setParticleSize(2.5);
+        break;
+      case 'mesh_solid':
+        setExtrusionDepth(200);         // Ultra heavy skyscraper projection
+        setGridDensity(34);
+        setSpeed(0.22);
+        setColorProfile('chroma');
+        setChromaColorStart('#ffffff'); // Polar Ice Topography
+        setChromaColorEnd('#0369a1');   // Deep Glacier Rift Marine
+        setChromaticAberration(4);
+        setMeshWaveScale(16);
+        setParticleSize(3.5);
+        break;
+        
+      default:
+        break;
+    }
+    showToast(`Applied 3D Geometry Filter: ${gStyle.label}`);
   };
 
   const getLiveInlineScript = () => {
@@ -2772,37 +4380,243 @@ export default function SilkGenerator() {
             <div className="flex flex-col gap-4">
               
               {/* Premium 3D Theme Presets Selector */}
-              <div className="flex flex-col gap-2 p-3 rounded-lg border border-violet-950/40 bg-zinc-950/70">
-                <span className="text-[9px] font-extrabold tracking-wider font-mono text-violet-400 uppercase leading-none block flex items-center gap-1">
-                  <Sparkles size={11} className="text-pink-400 animate-pulse" /> Live Premium Theme Presets
+              <div className="flex flex-col gap-2.5 p-3 rounded-lg border border-violet-950/40 bg-zinc-950/70">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold tracking-wider font-mono text-violet-400 uppercase leading-none flex items-center gap-1">
+                    <Sparkles size={11} className="text-pink-400 animate-pulse" /> {generatorMode === 'mediamesh' ? 'Live Premium Mesh Presets (31)' : 'Live Premium Silk Flow Presets (31)'}
+                  </span>
+                  <span className="text-[7.5px] font-mono text-zinc-550 uppercase">Interactive</span>
+                </div>
+                <span className="text-[8.5px] text-zinc-400 leading-tight">
+                  {generatorMode === 'mediamesh' 
+                    ? 'Click to apply responsive 3D media mesh presets. Customize fully afterward using design dials below!' 
+                    : 'Click to load premium 3D Silk Flow ribbon presets. Slide any control below to tweak twist, velocity or color!'}
                 </span>
-                <span className="text-[8px] text-zinc-500 leading-tight block">
-                  Quick configuration presets that transform the canvas into high-end responsive backgrounds.
-                </span>
-                <div className="grid grid-cols-2 gap-1.5 font-sans mt-1 text-[9px]">
-                  {[
-                    { id: 'plexus_core', label: 'Prismatic Plexus', mode: 'Mesh', model: 'mediamesh' },
-                    { id: 'quantum_stardust', label: 'Quantum Stardust', mode: 'Stipple', model: 'mediamesh' },
-                    { id: 'digital_vapor', label: 'Vapor Wave Matrix', mode: 'Ascii', model: 'mediamesh' },
-                    { id: 'golden_satin', label: 'Golden Contour Satin', mode: 'Topology', model: 'mediamesh' },
-                    { id: 'ethereal_aurora', label: 'Ethereal Aurora', mode: 'Mesh', model: 'mediamesh' },
-                    { id: 'holographic_pastels', label: 'Holograph Wireframe', mode: 'Wireframe', model: 'mediamesh' },
-                    { id: 'cosmic_neon_ribbon', label: 'Cosmic Neon Flow', mode: 'Ribbon', model: 'ribbon' },
-                    { id: 'pastel_glass_ribbon', label: 'Glass Frost Waves', mode: 'Ribbon', model: 'ribbon' },
-                    { id: 'sunset_satin_ribbon', label: 'Sunset Satin Glide', mode: 'Ribbon', model: 'ribbon' },
-                    { id: 'acid_emerald_ribbon', label: 'Acid Emerald Coil', mode: 'Ribbon', model: 'ribbon' }
-                  ]
-                  .filter((theme) => theme.model === generatorMode)
-                  .map((theme) => (
+
+                {/* Filter and Search controls */}
+                <div className="flex flex-col gap-1.5 mt-1">
+                  {/* Search Input field */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder={generatorMode === 'mediamesh' ? "Search mesh presets..." : "Search silk flow presets..."}
+                      value={presetSearch}
+                      onChange={(e) => setPresetSearch(e.target.value)}
+                      className="w-full px-2 py-1 text-[9px] bg-zinc-900 border border-zinc-800 rounded placeholder-zinc-650 text-zinc-300 focus:outline-none focus:border-violet-500/40 font-mono"
+                    />
+                    {presetSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setPresetSearch('')}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-[8px] uppercase font-bold font-mono"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Save Custom Preset Form */}
+                  <div className="flex gap-1.5 mt-1">
+                    <input
+                      type="text"
+                      placeholder="Name custom design..."
+                      value={newPresetName}
+                      onChange={(e) => setNewPresetName(e.target.value)}
+                      className="flex-1 px-2 py-1 text-[9px] bg-zinc-900 border border-zinc-800 rounded placeholder-zinc-600 text-zinc-300 focus:outline-none focus:border-violet-500/40 font-mono"
+                    />
                     <button
-                      key={theme.id}
-                      onClick={() => applyThemePreset(theme.id)}
-                      className="py-2 px-1.5 rounded bg-zinc-900 hover:bg-zinc-850 hover:border-violet-500/30 transition-all border border-zinc-850 text-left flex flex-col gap-0.5 select-none text-zinc-300 font-medium cursor-pointer active:scale-95"
+                      type="button"
+                      onClick={saveCurrentAsCustomPreset}
+                      className="px-2 py-1 bg-violet-650 hover:bg-violet-500 active:scale-95 text-white text-[8px] font-bold uppercase rounded font-mono transition-transform cursor-pointer"
                     >
-                      <span className="font-bold text-zinc-200 leading-none">{theme.label}</span>
-                      <span className="text-[7.5px] font-mono text-zinc-500 uppercase leading-none mt-0.5">{theme.mode} Mode</span>
+                      SAVE DESIGN
                     </button>
-                  ))}
+                  </div>
+                </div>
+
+                {/* Live Presets Scrollable Grid */}
+                <div className="max-h-[220px] overflow-y-auto pr-1 flex flex-col gap-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+                  {(() => {
+                    const meshThemes = [
+                      { id: 'plexus_core', label: 'Prismatic Plexus', mode: 'Plexus', model: 'mediamesh', colors: ['#00f0ff', '#ff007f'], desc: 'Responsive grid of multi-colored connected nodes' },
+                      { id: 'quantum_stardust', label: 'Quantum Stardust', mode: 'Stipple', model: 'mediamesh', colors: ['#ff00b7', '#3300ff'], desc: 'High-density stippled quantum scale cloud' },
+                      { id: 'digital_vapor', label: 'Vapor Wave Matrix', mode: 'Ascii', model: 'mediamesh', colors: ['#00ffcc', '#ff00ff'], desc: 'Nostalgic glowing code character terminal map' },
+                      { id: 'golden_satin', label: 'Golden Contour Satin', mode: 'Contour', model: 'mediamesh', colors: ['#ffe066', '#cc9900'], desc: 'Rich topographic altitude vector fields' },
+                      { id: 'ethereal_aurora', label: 'Ethereal Aurora', mode: 'Plexus', model: 'mediamesh', colors: ['#00f0ff', '#ff00aa'], desc: 'Floating cosmic light emission constellations' },
+                      { id: 'holographic_pastels', label: 'Holograph Wireframe', mode: 'Wireframe', model: 'mediamesh', colors: ['#fa8bff', '#2bd2ff'], desc: 'Subtle high-pass neon wireframe web structures' },
+                      { id: 'cyber_grid', label: 'Cyberpunk Grid Storm', mode: 'Stipple', model: 'mediamesh', colors: ['#39ff14', '#ff007f'], desc: 'Toxic neon green and hot pink cyber glitch mesh' },
+                      { id: 'matrix_hack', label: 'Core Matrix Cascades', mode: 'Ascii', model: 'mediamesh', colors: ['#00ff00', '#003300'], desc: 'Matrix-terminal green binary rain grid layout' },
+                      { id: 'kintsugi_gold', label: 'Kintsugi Cracked Earth', mode: 'Wireframe', model: 'mediamesh', colors: ['#d4af37', '#111111'], desc: 'Elegant broken pottery structure bound with gold lines' },
+                      { id: 'amethyst_res', label: 'Amethyst Crystal Rings', mode: 'Contour', model: 'mediamesh', colors: ['#9333ea', '#ec4899'], desc: 'Dense purple concentric energy contour bands' },
+                      { id: 'mint_frost', label: 'Arctic Glacier Plexus', mode: 'Plexus', model: 'mediamesh', colors: ['#2dd4bf', '#0284c7'], desc: 'Mint and cyan plexus network mimicking frost shards' },
+                      { id: 'supernova_burst', label: 'Celestial Supernova', mode: 'Plexus', model: 'mediamesh', colors: ['#e879f9', '#38bdf8'], desc: 'Hyper-dynamic exploding stellar particles network' },
+                      { id: 'lava_lamp', label: 'Volcanic Magma Spheres', mode: 'Stipple', model: 'mediamesh', colors: ['#ea580c', '#f43f5e'], desc: 'Thick, viscous stippled lava globules with warm hues' },
+                      { id: 'opal_aurora', label: 'Pearlescent Opal Halo', mode: 'Plexus', model: 'mediamesh', colors: ['#ffedd5', '#a5f3fc'], desc: 'Subtle pearlescent iridescent pastel elements mapping' },
+                      { id: 'neon_monolith', label: 'Brutalist Monolith', mode: 'Wireframe', model: 'mediamesh', colors: ['#facc15', '#27272a'], desc: 'Yellow and stone architectural lattice elements' },
+                      { id: 'toxic_fallout', label: 'Radioactive Waste Map', mode: 'Ascii', model: 'mediamesh', colors: ['#a3e635', '#166534'], desc: 'Highly luminous toxic hazard symbol matrix grid' },
+                      { id: 'star_velocity', label: 'Stellar Hyperdrive', mode: 'Stipple', model: 'mediamesh', colors: ['#ffffff', '#1d4ed8'], desc: 'Warp speed starlight particulate travel field' },
+                      { id: 'liquid_chrome', label: 'Molten Liquid Mercury', mode: 'Contour', model: 'mediamesh', colors: ['#f1f5f9', '#334155'], desc: 'Mirror-metallic topological liquid metal landscape' },
+                      { id: 'iridescent_bubble', label: 'Prismatic Soap Bubble', mode: 'Mesh', model: 'mediamesh', colors: ['#f472b6', '#38bdf8'], desc: 'Rainbow glass bubble shell with reflective layers' },
+                      { id: 'digital_glitch_core', label: 'Glitch Lattice Core', mode: 'Mesh', model: 'mediamesh', colors: ['#a855f7', '#4ade80'], desc: 'Shattered electronic scanlines and data buffers' },
+                      { id: 'hyper_grid_orange', label: 'Orange Cyber Grid', mode: 'Wireframe', model: 'mediamesh', colors: ['#ff5500', '#1a0033'], desc: 'Beautiful glowing copper sunset blueprint' },
+                      { id: 'plasma_leak', label: 'Plasma Radiation Leak', mode: 'Stipple', model: 'mediamesh', colors: ['#d9f99d', '#059669'], desc: 'Highly atomic luminous toxic fields' },
+                      { id: 'glacial_mesh', label: 'Glacial Crystal Mesh', mode: 'Mesh', model: 'mediamesh', colors: ['#e0f2fe', '#0284c7'], desc: 'Cold geometric glass fragments' },
+                      { id: 'binary_waterfall', label: 'Binary Code Cascade', mode: 'Ascii', model: 'mediamesh', colors: ['#00f0ff', '#003333'], desc: 'Cybernetic intelligence falling' },
+                      { id: 'nebula_plexus', label: 'Orion Nebula Nexus', mode: 'Plexus', model: 'mediamesh', colors: ['#f472b6', '#818cf8'], desc: 'Connected starlights in a dust cloud' },
+                      { id: 'magma_wire', label: 'Tectonic Magma Fissure', mode: 'Wireframe', model: 'mediamesh', colors: ['#f97316', '#7f1d1d'], desc: 'Cracked basalt glowing with heat' },
+                      { id: 'copper_sheet', label: 'Oxidized Amber Foil', mode: 'Contour', model: 'mediamesh', colors: ['#b45309', '#0f766e'], desc: 'Rich metallic copper and patina' },
+                      { id: 'hologram_scan', label: 'Holographic LIDAR Scan', mode: 'Stipple', model: 'mediamesh', colors: ['#fa8bff', '#2bd2ff'], desc: 'Rainbow chromatic point cloud representation' },
+                      { id: 'sublime_slime', label: 'Sublime Acid Ripple', mode: 'Mesh', model: 'mediamesh', colors: ['#bef264', '#0369a1'], desc: 'Semi-glitched fluid voxel displacement' },
+                      { id: 'ghostly_apparition', label: 'Ectoplasmic Vapor Map', mode: 'Mesh', model: 'mediamesh', colors: ['#ccfbf1', '#5b21b6'], desc: 'Spectral, slow-morphing veil' },
+                      { id: 'digital_monochrome', label: 'Brutalist Obsidian Matrix', mode: 'Stipple', model: 'mediamesh', colors: ['#ffffff', '#000000'], desc: 'High contrast black-and-white grain structure' }
+                    ];
+
+                    const ribbonThemes = [
+                      { id: 'cosmic_neon_ribbon', label: 'Cosmic Neon Flow', mode: 'Ribbon', model: 'ribbon', colors: ['#ff007f', '#7a00ff'], desc: 'Vibrant neon ribbon fibers gliding through hyperspace' },
+                      { id: 'pastel_glass_ribbon', label: 'Glass Frost Waves', mode: 'Ribbon', model: 'ribbon', colors: ['#ffd3e8', '#c1c9ff'], desc: 'Soft pastel ice filaments with high refraction' },
+                      { id: 'sunset_satin_ribbon', label: 'Sunset Satin Glide', mode: 'Ribbon', model: 'ribbon', colors: ['#ff0a7c', '#ffbe3b'], desc: 'Earthy luxury warmth following sunset satin drapes' },
+                      { id: 'acid_emerald_ribbon', label: 'Acid Emerald Coil', mode: 'Ribbon', model: 'ribbon', colors: ['#00ff66', '#0033cc'], desc: 'Hyper-vibrant coiled spring ribbon filaments' },
+                      { id: 'obsidian_flow', label: 'Midnight Velvet Flow', mode: 'Ribbon', model: 'ribbon', colors: ['#111111', '#4f46e5'], desc: 'Luxurious ultra-dark slow-flowing velvet ribbons' },
+                      { id: 'solar_flare', label: 'Burning Solar Flare', mode: 'Ribbon', model: 'ribbon', colors: ['#ff4500', '#ffcc00'], desc: 'Intense boiling streams of high temperature solar winds' },
+                      { id: 'electric_jelly', label: 'Bio-Electric Jellyfish', mode: 'Ribbon', model: 'ribbon', colors: ['#00f2fe', '#09f783'], desc: 'Deep ocean glowing jelly strands weaving in waves' },
+                      { id: 'cherry_blossom', label: 'Sakura Petal Whisper', mode: 'Ribbon', model: 'ribbon', colors: ['#fbcfe8', '#f472b6'], desc: 'Gentle, floating baby pink sakura silk streams' },
+                      { id: 'royal_velvet', label: 'Royal Plum Satin', mode: 'Ribbon', model: 'ribbon', colors: ['#701a75', '#b45309'], desc: 'Deep cosmic plum satin and orange fire ribbons' },
+                      { id: 'abyssal_trench', label: 'Abyssal Bioluminescent', mode: 'Ribbon', model: 'ribbon', colors: ['#1e3a8a', '#10b981'], desc: 'Silent deep-sea neon aquatic glowing filaments' },
+                      { id: 'dusty_rose', label: 'Vintage Crimson Damask', mode: 'Ribbon', model: 'ribbon', colors: ['#fda4af', '#aa1f46'], desc: 'Earthy vintage rose and retro magenta silk ribbon drapes' },
+                      { id: 'celestial_silk', label: 'Celestial Silk Constellations', mode: 'Ribbon', model: 'ribbon', colors: ['#38bdf8', '#22d3ee'], desc: 'Perfect cosmic starlight weave' },
+                      { id: 'phoenix_ashes', label: 'Phoenix Obsidian Fire', mode: 'Ribbon', model: 'ribbon', colors: ['#f97316', '#ef4444'], desc: 'Volcanic ash ribbon glowing with embers' },
+                      { id: 'northern_dance', label: 'Aurora Borealis Ribbon', mode: 'Ribbon', model: 'ribbon', colors: ['#10b981', '#34d399'], desc: 'Floating green aurora curtains' },
+                      { id: 'ocean_depths', label: 'Deep Pacific Silk', mode: 'Ribbon', model: 'ribbon', colors: ['#1d4ed8', '#014f86'], desc: 'Luxurious oceanic navy streams' },
+                      { id: 'golden_hour', label: 'Golden Hour Satin', mode: 'Ribbon', model: 'ribbon', colors: ['#fbbf24', '#f59e0b'], desc: 'Pure warm sunset ambient drapes' },
+                      { id: 'cyber_pulse', label: 'Tokyo Cyber Grid Pulse', mode: 'Ribbon', model: 'ribbon', colors: ['#ff007f', '#39ff14'], desc: 'Neon radioactive filaments' },
+                      { id: 'bubblegum_dream', label: 'Bubblegum Pastel Stream', mode: 'Ribbon', model: 'ribbon', colors: ['#f472b6', '#c084fc'], desc: 'Vibrant retro toy pinks and purples' },
+                      { id: 'lavender_mist', label: 'Ethereal Lavender Sleep', mode: 'Ribbon', model: 'ribbon', colors: ['#c084fc', '#e9d5ff'], desc: 'Soft, relaxing purple haze streams' },
+                      { id: 'magma_core', label: 'Viscous Lava Stream', mode: 'Ribbon', model: 'ribbon', colors: ['#ea580c', '#ff003c'], desc: 'Heavy, burning magma tendrils' },
+                      { id: 'sand_dune', label: 'Sahara Silk Ripple', mode: 'Ribbon', model: 'ribbon', colors: ['#f59e0b', '#fbbf24'], desc: 'Smooth desert sand dunes in the wind' },
+                      { id: 'ice_cavern', label: 'Glacial Fjord Stream', mode: 'Ribbon', model: 'ribbon', colors: ['#06b6d4', '#67e8f9'], desc: 'Sharp, pure, cold crystalline ice streams' },
+                      { id: 'monotech', label: 'Sleek Minimal Slate', mode: 'Ribbon', model: 'ribbon', colors: ['#ffffff', '#cbd5e1'], desc: 'Modern high-contrast monochrome design' },
+                      { id: 'autumn_canopy', label: 'October Autumn Woods', mode: 'Ribbon', model: 'ribbon', colors: ['#b45309', '#f97316'], desc: 'Rich rust, gold, and crimson foliage' },
+                      { id: 'toxic_sludge', label: 'Nuclear Acid Stream', mode: 'Ribbon', model: 'ribbon', colors: ['#a3e635', '#84cc16'], desc: 'Luminous toxic green hazard flows' },
+                      { id: 'unicorn_tear', label: 'Iridescent Unicorn Veil', mode: 'Ribbon', model: 'ribbon', colors: ['#f472b6', '#ffe4e6'], desc: 'Super-bright pearlescent streams' },
+                      { id: 'crimson_tide', label: 'Royal Vampire Velvet', mode: 'Ribbon', model: 'ribbon', colors: ['#9f1239', '#f43f5e'], desc: 'Moody, deep crimson and dark shadow silk' },
+                      { id: 'electric_violet', label: 'Electric Arc Discharge', mode: 'Ribbon', model: 'ribbon', colors: ['#8b5cf6', '#7c3aed'], desc: 'Violet static lightning filaments' },
+                      { id: 'emerald_forest', label: 'Amazonian Canopy Silk', mode: 'Ribbon', model: 'ribbon', colors: ['#059669', '#10b981'], desc: 'Lush deep forest emerald luxury streams' },
+                      { id: 'champagne_gold', label: 'VIP Champagne Pearl', mode: 'Ribbon', model: 'ribbon', colors: ['#fef08a', '#fef9c3'], desc: 'Deluxe champagne gold drapes' },
+                      { id: 'space_dust', label: 'Cosmic Starlight Stream', mode: 'Ribbon', model: 'ribbon', colors: ['#ec4899', '#a855f7'], desc: 'Dynamic nebula dust tail' }
+                    ];
+
+                    const currentThemes = generatorMode === 'mediamesh' ? meshThemes : ribbonThemes;
+
+                    // Merge Custom Presets
+                    const mergedThemes = [
+                      ...customPresets.filter(cp => {
+                        const isMesh = cp.category.includes('Mesh');
+                        return generatorMode === 'mediamesh' ? isMesh : !isMesh;
+                      }).map(cp => ({
+                        id: cp.id,
+                        label: cp.name,
+                        mode: 'Custom',
+                        model: generatorMode,
+                        colors: [cp.config.chromaColorStart || '#f472b6', cp.config.chromaColorEnd || '#c084fc'],
+                        desc: cp.description,
+                        isCustom: true
+                      })),
+                      ...currentThemes
+                    ];
+
+                    const filtered = mergedThemes.filter((theme) => {
+                      if (presetSearch) {
+                        const qToken = presetSearch.toLowerCase();
+                        return (
+                          theme.label.toLowerCase().includes(qToken) ||
+                          theme.mode.toLowerCase().includes(qToken) ||
+                          theme.desc.toLowerCase().includes(qToken)
+                        );
+                      }
+                      return true;
+                    });
+
+                    // Sort Favorites and Custom Presets to the absolute top of the scrollable frame
+                    const sorted = [...filtered].sort((a, b) => {
+                      const aFav = favoriteIds.includes(a.id) ? 1 : 0;
+                      const bFav = favoriteIds.includes(b.id) ? 1 : 0;
+                      if (aFav !== bFav) return bFav - aFav;
+                      const aCust = a.isCustom ? 1 : 0;
+                      const bCust = b.isCustom ? 1 : 0;
+                      return bCust - aCust;
+                    });
+
+                    if (sorted.length === 0) {
+                      return (
+                        <div className="text-center py-6 text-[9px] text-zinc-650 font-mono">
+                          No presets match your search.
+                        </div>
+                      );
+                    }
+
+                    return sorted.map((theme) => {
+                      const isFav = favoriteIds.includes(theme.id);
+                      return (
+                        <div
+                          key={theme.id}
+                          className="w-full text-left p-1.5 rounded transition-all border flex items-center justify-between gap-2 bg-zinc-950/40 border-transparent hover:bg-zinc-900/60 hover:border-zinc-850 group select-none"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => applyThemePreset(theme.id)}
+                            className="flex-1 flex items-center gap-2 overflow-hidden text-left cursor-pointer"
+                          >
+                            {/* Color preview circle containing gradient */}
+                            <div 
+                              className="w-3 h-3 rounded-full flex-shrink-0 border border-white/10 shadow-sm transition-all group-hover:scale-110"
+                              style={{ background: `linear-gradient(135deg, ${theme.colors[0]}, ${theme.colors[1]})` }}
+                            />
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-bold text-zinc-200 text-[9px] group-hover:text-white leading-none truncate flex items-center gap-1">
+                                {theme.label}
+                                {theme.isCustom && <span className="text-[6px] bg-indigo-500/15 text-indigo-300 px-1 rounded border border-indigo-500/25">Custom</span>}
+                                {isFav && <span className="text-[7.5px] text-yellow-400 font-mono">★</span>}
+                              </span>
+                              <span className="text-[7.5px] text-zinc-500 mt-0.5 truncate leading-none">{theme.desc}</span>
+                            </div>
+                          </button>
+
+                          {/* Badges and action triggers */}
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFavoritePreset(theme.id);
+                              }}
+                              className={`p-1 rounded transition-colors cursor-pointer ${isFav ? 'text-yellow-400 hover:text-yellow-350' : 'text-zinc-650 hover:text-zinc-400'}`}
+                              title={isFav ? "Remove from Favorites" : "Add to Favorites"}
+                            >
+                              <Star size={9} fill={isFav ? "currentColor" : "none"} />
+                            </button>
+
+                            {theme.isCustom && (
+                              <button
+                                type="button"
+                                onClick={(e) => deleteCustomPreset(theme.id, e)}
+                                className="p-1 rounded text-rose-500 hover:text-rose-400 cursor-pointer"
+                                title="Delete Custom Preset"
+                              >
+                                <Trash size={9} />
+                              </button>
+                            )}
+
+                            <span className="text-[6px] font-mono px-1 py-0.5 bg-zinc-800 rounded text-zinc-400 capitalize">
+                              {theme.model === 'ribbon' ? 'Silk Flow' : 'Mesh'}
+                            </span>
+                            <span className="text-[6px] font-bold font-mono px-1 py-0.5 bg-violet-950/40 rounded text-violet-300 uppercase">
+                              {theme.mode}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
               
@@ -2871,33 +4685,46 @@ export default function SilkGenerator() {
 
               {/* Geometry Styles selectors from user photos */}
               {generatorMode === 'mediamesh' && (
-                <div className="flex flex-col gap-2 p-3 rounded-lg border border-zinc-900 bg-zinc-950">
-                  <span className="text-[9px] font-extrabold tracking-wider font-mono text-violet-400 uppercase leading-none block mb-1">
-                    3D Mesh Geometry Filter
+                <div className="flex flex-col gap-2.5 p-3 rounded-lg border border-violet-950/40 bg-zinc-950/70">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-extrabold tracking-wider font-mono text-violet-400 uppercase leading-none flex items-center gap-1">
+                      <Sparkles size={11} className="text-pink-400 animate-pulse" /> 3D Mesh Geometry Filters (24)
+                    </span>
+                    <span className="text-[7.5px] font-mono text-zinc-550 uppercase">Direct Scroll</span>
+                  </div>
+                  <span className="text-[8.5px] text-zinc-400 leading-tight">
+                    Select a curated mathematical filter to transform the 3D grid shape representation instantly.
                   </span>
-                  <div className="grid grid-cols-2 gap-1.5 font-mono text-[8px]">
-                    {[
-                      { id: 'plexus', label: 'PLEXUS NET' },
-                      { id: 'stipple', label: 'STIPPLED DOTS' },
-                      { id: 'ascii', label: 'CYBER MATRIX' },
-                      { id: 'topological_contour', label: 'TOPOGRAPHY' },
-                      { id: 'disintegrated_voxels', label: 'SAND DECAY' },
-                      { id: 'points', label: 'PARTICLE CLOUD' },
-                      { id: 'wireframe', label: 'WIREFRAME' },
-                      { id: 'mesh', label: 'SHADED FACES' }
-                    ].map((gStyle) => (
-                      <button
-                        key={gStyle.id}
-                        onClick={() => { setMeshStyle(gStyle.id as any); showToast(`Loaded aesthetic: ${gStyle.label}`); }}
-                        className={`py-1.5 px-2 text-left rounded font-bold border transition-all cursor-pointer active:scale-95 truncate ${
-                          meshStyle === gStyle.id 
-                            ? 'bg-violet-500/15 border-violet-500/50 text-violet-200 font-extrabold' 
-                            : 'bg-zinc-900 border-zinc-850 text-zinc-500 hover:text-zinc-300'
-                        }`}
-                      >
-                        ● {gStyle.label}
-                      </button>
-                    ))}
+                  
+                  {/* Direct scrollable list of 24 filters */}
+                  <div className="max-h-[220px] overflow-y-auto pr-1 flex flex-col gap-1.5 scrollbar-thin scrollbar-thumb-zinc-850 scrollbar-track-transparent">
+                    {geometryFilters.map((gStyle) => {
+                      const isSelected = meshStyle === gStyle.style && activeGeometryFilter === gStyle.id;
+                      return (
+                        <button
+                          key={gStyle.id}
+                          type="button"
+                          onClick={() => selectGeometryFilter(gStyle)}
+                          className={`w-full text-left p-1.5 rounded transition-all border flex flex-col gap-0.5 cursor-pointer active:scale-[0.99] select-none ${
+                            isSelected 
+                              ? 'bg-violet-950/20 border-violet-500/50 text-violet-200' 
+                              : 'bg-zinc-900 border-zinc-850 hover:bg-zinc-850 hover:border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <span className="text-[8.5px] font-black tracking-wide font-mono uppercase flex items-center gap-1">
+                              <span className={isSelected ? 'text-violet-400' : 'text-zinc-600'}>✦</span> {gStyle.label}
+                            </span>
+                            <span className="text-[6.5px] font-bold font-mono px-1 py-0.5 bg-zinc-950/65 rounded text-zinc-500 uppercase tracking-widest scale-90">
+                              {gStyle.style === 'topological_contour' ? 'CONTOUR' : gStyle.style === 'disintegrated_voxels' ? 'SAND DECAY' : gStyle.style.toUpperCase()}
+                            </span>
+                          </div>
+                          <span className="text-[7.5px] text-zinc-500 leading-tight block">
+                            {gStyle.desc}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -3513,6 +5340,15 @@ export default function SilkGenerator() {
               >
                 <Video size={11} />
                 {recordingStatus === 'recording' ? 'Capturing Video Loop...' : 'Download webm video (.WEBM)'}
+              </button>
+              
+              {/* 5-Second Loop Recorder Trigger */}
+              <button 
+                onClick={handleRecord5Sec} 
+                className="w-full py-2.5 px-3 bg-yellow-400/10 hover:bg-yellow-400/20 border border-yellow-400/30 text-yellow-400 rounded text-[9px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 mt-2"
+              >
+                <Film size={11} />
+                {recordCountdown !== null ? `RECORDING LOOP... ${recordCountdown}s` : '5-SECOND QUICK LOOP RECORDER'}
               </button>
 
               <div className="border-t border-white/5 my-1" />

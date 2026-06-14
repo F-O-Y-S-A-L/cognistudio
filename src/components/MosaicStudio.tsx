@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+// @ts-ignore
+import fixWebmDuration from 'fix-webm-duration';
 import { 
   Upload, 
   Download, 
@@ -73,18 +75,18 @@ const GAMEBOY_COLORS: [number, number, number][] = [
   [15, 56, 15], [48, 98, 48], [139, 172, 15], [155, 188, 15]
 ];
 
-// Returns the nearest RGB color from table to input r,g,b
+// Returns the nearest RGB color from table to input r,g,b using high-speed squared distance matching (no square roots)
 function findNearestColor(r: number, g: number, b: number, palette: [number, number, number][]): [number, number, number] {
-  let minDistance = Infinity;
+  let minDistanceSq = Infinity;
   let nearest: [number, number, number] = [r, g, b];
-  for (const color of palette) {
-    const dist = Math.sqrt(
-      Math.pow(r - color[0], 2) +
-      Math.pow(g - color[1], 2) +
-      Math.pow(b - color[2], 2)
-    );
-    if (dist < minDistance) {
-      minDistance = dist;
+  for (let idx = 0; idx < palette.length; idx++) {
+    const color = palette[idx];
+    const dr = r - color[0];
+    const dg = g - color[1];
+    const db = b - color[2];
+    const distSq = dr * dr + dg * dg + db * db;
+    if (distSq < minDistanceSq) {
+      minDistanceSq = distSq;
       nearest = color;
     }
   }
@@ -195,7 +197,7 @@ export default function MosaicStudio() {
   const [isAnimated, setIsAnimated] = useState<boolean>(false);
   const [animationType, setAnimationType] = useState<AnimationType>('pulse');
   const [animationSpeed, setAnimationSpeed] = useState<number>(1.2);
-  const [timeState, setTimeState] = useState<number>(0);
+  const timeRef = useRef<number>(0);
 
   // States for Video Recording
   const [isRecording, setIsRecording] = useState(false);
@@ -203,6 +205,19 @@ export default function MosaicStudio() {
   const [videoQuality, setVideoQuality] = useState<'screen' | '720' | '1080' | '1440' | '2160'>('screen');
   const [exportDensityMode, setExportDensityMode] = useState<'fine' | 'proportional'>('fine');
   const [videoDuration, setVideoDuration] = useState<number>(5);
+  const [localVal, setLocalVal] = useState<number>(5);
+  const [localUnit, setLocalUnit] = useState<'seconds' | 'minutes'>('seconds');
+
+  // Sync localVal and localUnit with videoDuration changes (e.g. on load, reset, or update)
+  useEffect(() => {
+    if (videoDuration >= 60 && videoDuration % 60 === 0) {
+      setLocalUnit('minutes');
+      setLocalVal(videoDuration / 60);
+    } else {
+      setLocalUnit('seconds');
+      setLocalVal(videoDuration);
+    }
+  }, [videoDuration]);
   const [exportFps, setExportFps] = useState<number>(25);
   const [isExportingState, setIsExportingState] = useState<boolean>(false);
   const [exportFrameCount, setExportFrameCount] = useState<number>(0);
@@ -229,29 +244,31 @@ export default function MosaicStudio() {
   const isRecordingHighResRef = useRef(false);
   const recordingScaleRef = useRef(15000000);
   const cancelExportRef = useRef(false);
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Default Image Seed on Mount
   useEffect(() => {
     generateProceduralDefault();
   }, []);
 
-  // Frame Timer system for Animations hook
+  // Dedicated Video Playback & Animation Loop + Stale-closure Guard
+  const lastRenderRef = useRef<(() => void) | null>(null);
   useEffect(() => {
-    let animId: number;
-    if (isAnimated) {
-      const tick = () => {
-        setTimeState((prev) => prev + 0.04 * animationSpeed);
-        animId = requestAnimationFrame(tick);
-      };
-      animId = requestAnimationFrame(tick);
-    }
-    return () => {
-      cancelAnimationFrame(animId);
-    };
-  }, [isAnimated, animationSpeed]);
+    lastRenderRef.current = renderMosaic;
+  });
 
-  // Update canvas when state changes
+  // Update canvas when configuration changes (except for continuous animation ticks)
   useEffect(() => {
+    // Optimization: If the video is playing, or animations are active, or high-res recording is running,
+    // the requestAnimationFrame tick loop (below) is already drawing the canvas continuously at 60fps.
+    // Calling renderMosaic() synchronously here during slider dragging would cause duplicated rendering passes
+    // colliding in the same frame, severe main-thread lag, and choppy sound/video.
+    const isVideoPlaying = videoLoaded && sourceVideoRef.current && !sourceVideoRef.current.paused;
+    const isRecordActive = isRecording || (mediaRecorderRef.current && mediaRecorderRef.current.state === 'running');
+    if (isVideoPlaying || isAnimated || isRecordActive) {
+      return;
+    }
+
     if ((imageLoaded && sourceImageRef.current) || (videoLoaded && sourceVideoRef.current)) {
       renderMosaic();
     }
@@ -284,20 +301,13 @@ export default function MosaicStudio() {
     colorTintStrength,
     isAnimated,
     animationType,
-    timeState,
     exportDensityMode
   ]);
 
-  // Dedicated Video Playback Loop & Stale-closure Guard
-  const lastRenderRef = useRef<(() => void) | null>(null);
-  useEffect(() => {
-    lastRenderRef.current = renderMosaic;
-  });
-
   useEffect(() => {
     let animId: number;
-    let lastTime = 0;
-    const tick = (now: number) => {
+    const tick = () => {
+      // 1. COMPLETELY PAUSE background RAF draws during precise offline exports to avoid collisions
       if (isExportingState && exportSpeedMode !== 'realtime') {
         animId = requestAnimationFrame(tick);
         return;
@@ -305,24 +315,21 @@ export default function MosaicStudio() {
       const isVideoPlaying = videoLoaded && sourceVideoRef.current && !sourceVideoRef.current.paused;
       // Continuously draw when video is playing, canvas animations are running, or a video capture session is actively writing frames
       const isRecordActive = isRecording || (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording');
+      
       if (isVideoPlaying || isAnimated || isRecordActive) {
-        if (isRecordActive) {
-          // Strict frame throttle to 25 FPS (40ms interval) during active high-res encoding.
-          // This gives the computer breathing room and guarantees buttery-smooth, stutter-free output!
-          const elapsed = now - lastTime;
-          if (elapsed >= 40) {
-            lastTime = now - (elapsed % 40);
-            lastRenderRef.current?.();
-          }
-        } else {
-          lastRenderRef.current?.();
+        if (isAnimated) {
+          timeRef.current += 0.04 * animationSpeed;
         }
+        
+        // Render at max VSync capability (60fps+) for absolute smoothness!
+        // No arbitrary throttling, ensuring the capture stream gets pristine fresh data on every encoder cycle.
+        lastRenderRef.current?.();
       }
       animId = requestAnimationFrame(tick);
     };
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
-  }, [videoLoaded, isAnimated, isRecording, isExportingState, exportSpeedMode]);
+  }, [videoLoaded, isAnimated, isRecording, isExportingState, exportSpeedMode, animationSpeed]);
 
   // Generate a beautiful, vibrant procedural art sample when no image is uploaded
   const generateProceduralDefault = () => {
@@ -410,7 +417,7 @@ export default function MosaicStudio() {
 
   // Main Rendering Loop executing on changes
   const renderMosaic = (overrideTime?: number) => {
-    const activeTimeState = typeof overrideTime === 'number' ? overrideTime : timeState;
+    const activeTimeState = typeof overrideTime === 'number' ? overrideTime : timeRef.current;
     const img: CanvasImageSource | null = videoLoaded ? sourceVideoRef.current : sourceImageRef.current;
     const canvas = mainCanvasRef.current;
     if (!img || !canvas) return;
@@ -453,10 +460,13 @@ export default function MosaicStudio() {
     const cols = Math.max(1, Math.ceil(drawWidth / stepSize));
     const rows = Math.max(1, Math.ceil(drawHeight / stepSize));
 
-    // Offscreen Canvas for Downscaling sampling
-    const offscreenCanvas = document.createElement('canvas');
-    offscreenCanvas.width = cols;
-    offscreenCanvas.height = rows;
+    // Reuse offscreen Canvas for Downscaling sampling to prevent Garbage Collection pauses and lags
+    if (!offscreenCanvasRef.current) {
+      offscreenCanvasRef.current = document.createElement('canvas');
+    }
+    const offscreenCanvas = offscreenCanvasRef.current;
+    if (offscreenCanvas.width !== cols) offscreenCanvas.width = cols;
+    if (offscreenCanvas.height !== rows) offscreenCanvas.height = rows;
     const offscreenCtx = offscreenCanvas.getContext('2d');
     if (!offscreenCtx) {
       return;
@@ -532,6 +542,28 @@ export default function MosaicStudio() {
       tintR = parseInt(colorTintHex.slice(1, 3), 16);
       tintG = parseInt(colorTintHex.slice(3, 5), 16);
       tintB = parseInt(colorTintHex.slice(5, 7), 16);
+    }
+
+    // Fast Pre-batched Grid Rendering for Bead Dot Style
+    if (dotStyle === 'bead') {
+      ctx.strokeStyle = bgStyle === 'white' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const gridW = cols * stepSize;
+      const gridH = rows * stepSize;
+      // Vertical grid lines
+      for (let c = 0; c <= cols; c++) {
+        const x = c * stepSize;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, gridH);
+      }
+      // Horizontal grid lines
+      for (let r = 0; r <= rows; r++) {
+        const y = r * stepSize;
+        ctx.moveTo(0, y);
+        ctx.lineTo(gridW, y);
+      }
+      ctx.stroke();
     }
 
     // Draw the dot/mosaic grid shapes
@@ -673,18 +705,18 @@ export default function MosaicStudio() {
         }
 
         const tileColor = `rgb(${Math.round(rVal)}, ${Math.round(gVal)}, ${Math.round(bVal)})`;
-        const needsSaveRestore = activeGlowStrength > 0 || gridAngle !== 0;
+        
+        if (activeGlowStrength > 0) {
+          ctx.shadowColor = `rgba(${Math.round(rVal)}, ${Math.round(gVal)}, ${Math.round(bVal)}, 0.4)`;
+        }
+        
+        const needsSaveRestore = gridAngle !== 0;
 
         if (needsSaveRestore) {
           ctx.save();
-          if (activeGlowStrength > 0) {
-            ctx.shadowColor = `rgba(${Math.round(rVal)}, ${Math.round(gVal)}, ${Math.round(bVal)}, 0.4)`;
-          }
-          if (gridAngle !== 0) {
-            ctx.translate(cx, cy);
-            ctx.rotate((gridAngle * Math.PI) / 180);
-            ctx.translate(-cx, -cy);
-          }
+          ctx.translate(cx, cy);
+          ctx.rotate((gridAngle * Math.PI) / 180);
+          ctx.translate(-cx, -cy);
         }
 
         // NEW FEATURE: Animation drift & orbit (orbit mechanics)
@@ -745,26 +777,24 @@ export default function MosaicStudio() {
         // Choose and Render from extended custom shape catalog
         switch (resolvedDotStyle) {
           case 'bead': {
-            ctx.strokeStyle = bgStyle === 'white' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(renderCx - dotSize / 2, renderCy - dotSize / 2, dotSize, dotSize);
-
             const radius = Math.max(1.5, activeRadius);
             ctx.fillStyle = tileColor;
             ctx.beginPath();
             ctx.arc(renderCx, renderCy, radius, 0, Math.PI * 2);
             ctx.fill();
 
-            ctx.fillStyle = 'rgba(255,255,255,0.7)';
-            ctx.beginPath();
-            ctx.arc(renderCx - radius * 0.35, renderCy - radius * 0.35, Math.max(0.5, radius * 0.25), 0, Math.PI * 2);
-            ctx.fill();
+            if (radius >= 3.0) {
+              ctx.fillStyle = 'rgba(255,255,255,0.7)';
+              ctx.beginPath();
+              ctx.arc(renderCx - radius * 0.35, renderCy - radius * 0.35, Math.max(0.5, radius * 0.25), 0, Math.PI * 2);
+              ctx.fill();
 
-            ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-            ctx.lineWidth = radius * 0.15;
-            ctx.beginPath();
-            ctx.arc(renderCx, renderCy, radius * 0.7, 0, Math.PI * 2);
-            ctx.stroke();
+              ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+              ctx.lineWidth = radius * 0.15;
+              ctx.beginPath();
+              ctx.arc(renderCx, renderCy, radius * 0.7, 0, Math.PI * 2);
+              ctx.stroke();
+            }
             break;
           }
 
@@ -800,21 +830,23 @@ export default function MosaicStudio() {
             ctx.rect(renderCx - side / 2, renderCy - side / 2, side, side);
             ctx.fill();
 
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.28)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(renderCx - side / 2, renderCy - side / 2, side, side);
+            if (side >= 6.0) {
+              ctx.strokeStyle = 'rgba(0, 0, 0, 0.28)';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(renderCx - side / 2, renderCy - side / 2, side, side);
 
-            const pegR = side * 0.28;
-            ctx.fillStyle = tileColor;
-            ctx.beginPath();
-            ctx.arc(renderCx, renderCy, pegR, 0, Math.PI * 2);
-            ctx.fill();
+              const pegR = side * 0.28;
+              ctx.fillStyle = tileColor;
+              ctx.beginPath();
+              ctx.arc(renderCx, renderCy, pegR, 0, Math.PI * 2);
+              ctx.fill();
 
-            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-            ctx.lineWidth = Math.max(1, pegR * 0.25);
-            ctx.beginPath();
-            ctx.arc(renderCx, renderCy, pegR, Math.PI, Math.PI * 1.5);
-            ctx.stroke();
+              ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+              ctx.lineWidth = Math.max(1, pegR * 0.25);
+              ctx.beginPath();
+              ctx.arc(renderCx, renderCy, pegR, Math.PI, Math.PI * 1.5);
+              ctx.stroke();
+            }
             break;
           }
 
@@ -996,12 +1028,33 @@ export default function MosaicStudio() {
         triggerToast('Error: File must be a valid video format!');
         return;
     }
+
+    // Clean up previous video to stop background decoding and prevent severe memory/thread leaks
+    if (sourceVideoRef.current) {
+      try {
+        sourceVideoRef.current.pause();
+        sourceVideoRef.current.src = "";
+        sourceVideoRef.current.load();
+      } catch (err) {
+        console.warn("Failed clearing old video:", err);
+      }
+    }
+    if (videoSrc && videoSrc.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(videoSrc);
+      } catch (err) {
+        console.warn("Failed revoking old blob url:", err);
+      }
+    }
+
     const url = URL.createObjectURL(file);
     const video = document.createElement('video');
+    video.id = 'mosaic-active-video-element';
     video.src = url;
     video.muted = true;
     video.loop = true;
     video.autoplay = true;
+    video.playsInline = true;
     video.crossOrigin = 'anonymous';
 
     video.onloadeddata = () => {
@@ -1011,11 +1064,36 @@ export default function MosaicStudio() {
         // If image was loaded, disable it? No, maybe just replace.
         setImageLoaded(false); 
         setImageSrc(null);
-        triggerToast('Success: Loaded custom video source successfully!');
+        
+        // Match video duration constraints automatically (keeping it between 5s and 30s for lightning fast processing)
+        const autoDuration = Math.max(5, Math.min(30, Math.ceil(video.duration || 5)));
+        setVideoDuration(autoDuration);
+        
+        triggerToast(`Success: Loaded custom video successfully! Autoselected ${autoDuration}s loop.`);
         renderMosaic(); // Re-render
     };
     video.play();
   };
+
+  // DOM Video element cleanups on unmount
+  useEffect(() => {
+    return () => {
+      if (sourceVideoRef.current) {
+        try {
+          sourceVideoRef.current.pause();
+          sourceVideoRef.current.src = "";
+        } catch (e) {
+          // ignore
+        }
+      }
+      const existingVideo = document.getElementById('mosaic-active-video-element') as HTMLVideoElement;
+      if (existingVideo) {
+        existingVideo.pause();
+        existingVideo.src = "";
+        existingVideo.remove();
+      }
+    };
+  }, []);
 
   const processSelectedFile = (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -1125,7 +1203,7 @@ export default function MosaicStudio() {
     
     let stream: MediaStream;
     try {
-      stream = canvas.captureStream(fps);
+      stream = (canvas as any).captureStream(fps);
     } catch (e) {
       triggerToast('Error: Canvas stream capture not supported in this browser.');
       setIsRecording(false);
@@ -1201,13 +1279,27 @@ export default function MosaicStudio() {
       const fileExt = isMp4 ? 'mp4' : 'webm';
 
       const blob = new Blob(recordedChunksRef.current, { type: finalMime });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const qualityLabel = videoQuality === 'screen' ? 'screen' : `${videoQuality}p`;
-      link.download = `mosaic-pix-dot-studio-${qualityLabel}-${videoDuration}s-${Date.now()}.${fileExt}`;
-      link.click();
-      triggerToast(`Success: Exported high-fidelity ${qualityLabel} (${fileExt.toUpperCase()}) mosaic video successfully!`);
+
+      if (fileExt === 'webm') {
+        const durationMs = videoDuration * 1000;
+        fixWebmDuration(blob, durationMs, (fixedBlob: Blob) => {
+          const url = URL.createObjectURL(fixedBlob);
+          const link = document.createElement('a');
+          link.href = url;
+          const qualityLabel = videoQuality === 'screen' ? 'screen' : `${videoQuality}p`;
+          link.download = `mosaic-pix-dot-studio-${qualityLabel}-${videoDuration}s-${Date.now()}.${fileExt}`;
+          link.click();
+          triggerToast(`Success: Exported high-fidelity ${qualityLabel} (${fileExt.toUpperCase()}) mosaic video successfully!`);
+        });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const qualityLabel = videoQuality === 'screen' ? 'screen' : `${videoQuality}p`;
+        link.download = `mosaic-pix-dot-studio-${qualityLabel}-${videoDuration}s-${Date.now()}.${fileExt}`;
+        link.click();
+        triggerToast(`Success: Exported high-fidelity ${qualityLabel} (${fileExt.toUpperCase()}) mosaic video successfully!`);
+      }
     };
 
     recorder.start();
@@ -1264,7 +1356,9 @@ export default function MosaicStudio() {
             break;
           }
 
-          // 1. Advance the video currentTime (if it's a video) and wait for 'seeked'
+          const frameStart = Date.now();
+
+          // 1. Advance the video currentTime (if it's a video) and wait for 'seeked' with full compositing flush
           if (isVideoSource) {
             const videoElement = sourceVideoRef.current!;
             videoElement.currentTime = frameNum * frameInterval;
@@ -1280,7 +1374,9 @@ export default function MosaicStudio() {
               };
               const onSeeked = () => done();
               videoElement.addEventListener('seeked', onSeeked);
-              setTimeout(done, 180); // safety guard reduced from 600ms to 180ms for MUCH faster export!
+              // Safe decode timeout (250ms) ensures slow frames are fully decoded and rendered.
+              // If seeked fires faster, it resolves instantly.
+              setTimeout(done, 250);
             });
           }
 
@@ -1288,12 +1384,20 @@ export default function MosaicStudio() {
           const frameTimeOverride = frameNum * 0.04 * animationSpeed;
           renderMosaic(frameTimeOverride);
 
+          // 3. For precise matching, let requestAnimationFrame paint the frame, then wait
+          // for the exact frame interval matching the target recording FPS (e.g., 40ms for 25 FPS).
+          // This allows standard canvas.captureStream(fps) on the background thread to sample exactly 1 frame per interval.
+          await new Promise<void>((resolve) => {
+            requestAnimationFrame(() => {
+              const frameIntervalMs = 1000 / fps;
+              const elapsed = Date.now() - frameStart;
+              const waitTime = Math.max(10, frameIntervalMs - elapsed);
+              setTimeout(resolve, waitTime);
+            });
+          });
+
           // Update progress state
           setExportFrameCount(frameNum + 1);
-
-          // 3. Give the canvas encoder a short break to ingest the frame
-          const encodingBufferDelay = videoQuality === '2160' ? 6 : videoQuality === '1440' ? 4 : 2;
-          await new Promise((resolve) => setTimeout(resolve, encodingBufferDelay));
         }
 
         // Stop recorder to finish the video file
@@ -1325,6 +1429,7 @@ export default function MosaicStudio() {
   const getMosaicSVGString = (forceAnimated = true) => {
     const img = videoLoaded ? sourceVideoRef.current : sourceImageRef.current;
     if (!img) return null;
+    const activeTimeState = timeRef.current;
 
     try {
       const vWidth = (img as HTMLVideoElement).videoWidth || (img as HTMLImageElement).width || 640;
@@ -1448,8 +1553,8 @@ export default function MosaicStudio() {
               
               if (animated) {
                 const timeOffset = seed % (Math.PI * 2);
-                animOffsetX = Math.sin(timeState * 3 + timeOffset) * scatterIntensity * 0.3;
-                animOffsetY = Math.cos(timeState * 2.5 + timeOffset) * scatterIntensity * 0.3;
+                animOffsetX = Math.sin(activeTimeState * 3 + timeOffset) * scatterIntensity * 0.3;
+                animOffsetY = Math.cos(activeTimeState * 2.5 + timeOffset) * scatterIntensity * 0.3;
               }
               
               cx += Math.cos(staticAngle) * scatterIntensity + animOffsetX;
@@ -1495,7 +1600,7 @@ export default function MosaicStudio() {
           bVal = Math.max(0, Math.min(255, bVal));
 
           if (animated && animationType === 'colorCycle') {
-            const cycleAngle = (timeState * 40) % 360;
+            const cycleAngle = (activeTimeState * 40) % 360;
             [rVal, gVal, bVal] = rotateColor(rVal, gVal, bVal, cycleAngle);
           }
 
@@ -1531,14 +1636,14 @@ export default function MosaicStudio() {
           let renderCy = cy + paddingY;
           if (animated) {
             if (animationType === 'drift') {
-              renderCx += Math.sin(timeState * 1.5 + cy * 0.08) * (dotSize * 0.18);
-              renderCy += Math.cos(timeState * 1.5 + cx * 0.08) * (dotSize * 0.18);
+              renderCx += Math.sin(activeTimeState * 1.5 + cy * 0.08) * (dotSize * 0.18);
+              renderCy += Math.cos(activeTimeState * 1.5 + cx * 0.08) * (dotSize * 0.18);
             } else if (animationType === 'orbit') {
               const dx = cx - targetWidth / 2;
               const dy = cy - targetHeight / 2;
               const dist = Math.sqrt(dx * dx + dy * dy);
               if (dist > 0) {
-                const angle = Math.atan2(dy, dx) + 0.08 * Math.sin(timeState * 0.3 + dist * 0.005);
+                const angle = Math.atan2(dy, dx) + 0.08 * Math.sin(activeTimeState * 0.3 + dist * 0.005);
                 renderCx = targetWidth / 2 + paddingX + Math.cos(angle) * dist;
                 renderCy = targetHeight / 2 + paddingY + Math.sin(angle) * dist;
               }
@@ -1551,22 +1656,22 @@ export default function MosaicStudio() {
 
           if (animated) {
             if (animationType === 'pulse') {
-              styleFactor *= (1.0 + 0.22 * Math.sin(timeState * 2.0 + (cx + cy) * 0.006));
+              styleFactor *= (1.0 + 0.22 * Math.sin(activeTimeState * 2.0 + (cx + cy) * 0.006));
             } else if (animationType === 'wave') {
               const centerDist = Math.sqrt(Math.pow(cx - targetWidth / 2, 2) + Math.pow(cy - targetHeight / 2, 2));
-              styleFactor *= (0.55 + 0.45 * Math.sin((centerDist * 0.038) - timeState * 2.5));
+              styleFactor *= (0.55 + 0.45 * Math.sin((centerDist * 0.038) - activeTimeState * 2.5));
             } else if (animationType === 'matrix') {
-              styleFactor *= (0.5 + 0.5 * Math.max(0, Math.sin((rIndex * 0.4) - timeState * 2.0 + cIndex * 0.1)));
+              styleFactor *= (0.5 + 0.5 * Math.max(0, Math.sin((rIndex * 0.4) - activeTimeState * 2.0 + cIndex * 0.1)));
             } else if (animationType === 'explodingStars') {
-              styleFactor *= (0.3 + 0.7 * Math.abs(Math.sin(timeState * 3 + (cx * cy) * 0.001)));
+              styleFactor *= (0.3 + 0.7 * Math.abs(Math.sin(activeTimeState * 3 + (cx * cy) * 0.001)));
             } else if (animationType === 'rippleBounce') {
               const dist = Math.sqrt(Math.pow(cx - targetWidth / 2, 2) + Math.pow(cy - targetHeight / 2, 2));
-              styleFactor *= (0.7 + 0.3 * Math.sin(timeState * 3.0 - dist * 0.05));
+              styleFactor *= (0.7 + 0.3 * Math.sin(activeTimeState * 3.0 - dist * 0.05));
             } else if (animationType === 'shimmerGlow') {
-              styleFactor *= (0.6 + 0.4 * Math.sin(timeState * 4.0 + (rIndex * 13 + cIndex * 37) % 100));
+              styleFactor *= (0.6 + 0.4 * Math.sin(activeTimeState * 4.0 + (rIndex * 13 + cIndex * 37) % 100));
             } else if (animationType === 'dnaSpiral') {
               const angleVal = Math.atan2(cy - targetHeight / 2, cx - targetWidth / 2);
-              styleFactor *= (0.55 + 0.45 * Math.sin(angleVal * 3.0 + timeState * 2.5));
+              styleFactor *= (0.55 + 0.45 * Math.sin(angleVal * 3.0 + activeTimeState * 2.5));
             }
           }
 
@@ -2061,48 +2166,112 @@ export default function MosaicHalftone() {
                 </select>
               </div>
 
-              {/* Custom Duration & FPS Controls */}
-              <div className="col-span-2 grid grid-cols-2 gap-3 my-1">
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">
-                      Duration
-                    </label>
-                    <span className="text-[9px] font-mono text-indigo-400 font-bold">{videoDuration}s</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 bg-zinc-900 border border-white/10 rounded px-1.5 py-0.5">
-                    <input
-                      type="range"
-                      min={5}
-                      max={600}
-                      value={videoDuration}
-                      onChange={(e) => setVideoDuration(Math.max(5, parseInt(e.target.value) || 5))}
-                      className="accent-indigo-500 cursor-pointer h-1.5 flex-grow"
-                    />
-                    <input
-                      type="number"
-                      min={5}
-                      max={600}
-                      value={videoDuration}
-                      onChange={(e) => setVideoDuration(Math.max(5, parseInt(e.target.value) || 5))}
-                      className="w-10 bg-zinc-950 text-[10px] text-indigo-300 font-mono text-center rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 border border-white/5 py-0.5"
-                    />
-                  </div>
+              <div className="col-span-1 flex flex-col gap-1 my-1">
+                <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">
+                  Frame Rate (FPS)
+                </label>
+                <select
+                  value={exportFps}
+                  onChange={(e) => setExportFps(parseInt(e.target.value))}
+                  className="w-full bg-zinc-900 border border-white/10 rounded py-1 px-2 text-[9px] text-zinc-300 font-mono focus:outline-none focus:border-[#4A38F5] cursor-pointer"
+                >
+                  <option value="15">15 FPS (Lightweight)</option>
+                  <option value="24">24 FPS (Cinematic)</option>
+                  <option value="25">25 FPS (Standard)</option>
+                  <option value="30">30 FPS (Fluid Motion)</option>
+                </select>
+              </div>
+
+              {/* Custom Duration & Presets Panel */}
+              <div className="col-span-2 flex flex-col gap-1.5 my-1 border-t border-b border-white/5 py-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">
+                    Video Duration
+                  </label>
+                  <span className="text-[9px] font-mono text-[#2dd4bf] font-bold">
+                    {videoDuration >= 60 
+                      ? `${Math.floor(videoDuration / 60)}m ${videoDuration % 60}s` 
+                      : `${videoDuration}s`
+                    } <span className="text-zinc-500 font-normal">({videoDuration}s total, Max 5m)</span>
+                  </span>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block font-mono">
-                    Frame Rate (FPS)
-                  </label>
+                {/* Quick Presets row */}
+                <div className="grid grid-cols-6 gap-1">
+                  {[
+                    { label: '10s', value: 10 },
+                    { label: '20s', value: 20 },
+                    { label: '30s', value: 30 },
+                    { label: '1m', value: 60 },
+                    { label: '2m', value: 120 },
+                    { label: '5m', value: 300 }
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        setVideoDuration(preset.value);
+                      }}
+                      className={`text-[9px] py-1 rounded border font-mono transition-all text-center cursor-pointer ${
+                        videoDuration === preset.value
+                          ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300 font-bold shadow-sm shadow-indigo-600/10'
+                          : 'bg-zinc-900 border-white/5 text-zinc-400 hover:text-zinc-200 hover:border-white/10'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Manual Type / Edit field */}
+                <div className="flex items-center gap-1.5 bg-zinc-905 border border-white/10 rounded p-1">
+                  <span className="text-[8px] font-mono text-zinc-500 uppercase px-1">Custom:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={localUnit === 'minutes' ? 5 : 300}
+                    value={localVal === 0 ? '' : localVal}
+                    onChange={(e) => {
+                      const typedStr = e.target.value;
+                      if (typedStr === '') {
+                        setLocalVal(0);
+                        return;
+                      }
+                      const raw = parseInt(typedStr) || 0;
+                      let val = raw;
+                      if (localUnit === 'minutes') {
+                        val = Math.min(5, Math.max(0, val));
+                        setLocalVal(val);
+                        setVideoDuration(val * 60 === 0 ? 1 : val * 60);
+                      } else {
+                        val = Math.min(300, Math.max(0, val));
+                        setLocalVal(val);
+                        setVideoDuration(val === 0 ? 1 : val);
+                      }
+                    }}
+                    className="flex-1 min-w-0 bg-zinc-950 text-[10px] text-zinc-100 font-mono pl-2 pr-1 py-1 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 border border-white/5"
+                    placeholder={`Enter duration (1-${localUnit === 'minutes' ? '5' : '300'})`}
+                  />
+                  
                   <select
-                    value={exportFps}
-                    onChange={(e) => setExportFps(parseInt(e.target.value))}
-                    className="w-full bg-zinc-900 border border-white/10 rounded py-1 px-2 text-[9px] text-zinc-300 font-mono focus:outline-none focus:border-[#4A38F5] cursor-pointer h-[26px]"
+                    value={localUnit}
+                    onChange={(e) => {
+                      const unit = e.target.value as 'seconds' | 'minutes';
+                      setLocalUnit(unit);
+                      if (unit === 'minutes') {
+                        const min = Math.min(5, Math.max(1, Math.round(videoDuration / 60)));
+                        setLocalVal(min);
+                        setVideoDuration(min * 60);
+                      } else {
+                        const sec = Math.min(300, Math.max(5, videoDuration));
+                        setLocalVal(sec);
+                        setVideoDuration(sec);
+                      }
+                    }}
+                    className="bg-zinc-950 text-[9px] text-indigo-300 font-mono py-1 px-1.5 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 border border-white/5 cursor-pointer"
                   >
-                    <option value="15">15 FPS (Ultra Fast &amp; Light)</option>
-                    <option value="24">24 FPS (Cinematic Loop)</option>
-                    <option value="25">25 FPS (Standard Web)</option>
-                    <option value="30">30 FPS (Smooth Motion)</option>
+                    <option value="seconds">Seconds</option>
+                    <option value="minutes">Minutes</option>
                   </select>
                 </div>
               </div>
@@ -2156,15 +2325,6 @@ export default function MosaicHalftone() {
               >
                 <Code size={11} />
                 React Code
-              </button>
-
-              <button
-                id="btn-reset-mosaic-params"
-                onClick={handleReset}
-                className="col-span-2 p-2 bg-white/5 border border-white/10 hover:border-[#ff5500]/50 hover:bg-[#ff5500]/10 rounded font-mono text-[10px] text-zinc-300 hover:text-[#ff5500] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-              >
-                <RotateCcw size={13} />
-                Reset Parameters Factory Default
               </button>
             </div>
           </div>

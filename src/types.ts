@@ -242,7 +242,7 @@ export const INITIAL_SETTINGS: AppSettings = {
     breatheEnabled: false,
     cameraParallaxEnabled: false,
     followHoverEnabled: false,
-    followDragEnabled: false,
+    followDragEnabled: true,
     floatEnabled: false,
     hoverHalftoneEnabled: false,
     hoverLightEnabled: false,

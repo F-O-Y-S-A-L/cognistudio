@@ -10,7 +10,6 @@ import {
   Palette, 
   Sliders, 
   Check, 
-  Undo2,
   RefreshCw,
   Maximize2,
   Circle,
@@ -62,7 +61,8 @@ export default function ServeoNetwork() {
 
   // --- Dynamic Layout Configuration states ---
   const [activeType, setActiveType] = useState<
-    'Multipartite' | 'Lattice' | 'Complete' | 'Bipartite' | 'Wheel' | 'Petersen' | 'Circulant' | 'Concentric' | 'Rose' | 'Geodesic' | 'Apollonian' | 'Hypercube'
+    | 'Multipartite' | 'Lattice' | 'Complete' | 'Bipartite' | 'Wheel' | 'Petersen' | 'Circulant' | 'Concentric' | 'Rose' | 'Geodesic' | 'Apollonian' | 'Hypercube'
+    | 'Chladni' | 'Lissajous' | 'Mobius' | 'Lorenz' | 'TorusKnot' | 'Fibonacci' | 'Sierpinski' | 'Julia' | 'Peano' | 'DoubleHelix' | 'QuantumCloud' | 'Vortex'
   >('Multipartite');
 
   // Parameters
@@ -610,6 +610,297 @@ export default function ServeoNetwork() {
         }
         break;
       }
+
+      case 'Chladni': {
+        const resolution = 5;
+        const r = 0.5 - paddingScale;
+        for (let i = 0; i < resolution; i++) {
+          const xFrac = (i / (resolution - 1)) * 2 - 1;
+          const x = half + xFrac * r;
+          for (let j = 0; j < resolution; j++) {
+            const yFrac = (j / (resolution - 1)) * 2 - 1;
+            const y = half + yFrac * r;
+            const n = 3, m = 2;
+            const factor = Math.cos(n * Math.PI * xFrac) * Math.cos(m * Math.PI * yFrac) - Math.cos(m * Math.PI * xFrac) * Math.cos(n * Math.PI * yFrac);
+            const dy = factor * 0.08;
+            list.push({ id: `ch_${i}_${j}`, x, y: y + dy, role: 'inner', name: `C${i}${j}` });
+          }
+        }
+        for (let i = 0; i < resolution; i++) {
+          for (let j = 0; j < resolution; j++) {
+            if (i < resolution - 1) lines.push({ fromId: `ch_${i}_${j}`, toId: `ch_${i+1}_${j}` });
+            if (j < resolution - 1) lines.push({ fromId: `ch_${i}_${j}`, toId: `ch_${i}_${j+1}` });
+          }
+        }
+        break;
+      }
+
+      case 'Lissajous': {
+        const resolution = 24;
+        const r = 0.5 - paddingScale;
+        for (let i = 0; i < resolution; i++) {
+          const t = (i / resolution) * 2 * Math.PI;
+          const kx = 3, ky = 4;
+          const x = half + r * Math.sin(kx * t);
+          const y = half + r * Math.sin(ky * t);
+          list.push({ id: `lis_${i}`, x, y, role: 'outer', name: `L${i+1}` });
+        }
+        for (let i = 0; i < resolution; i++) {
+          lines.push({ fromId: `lis_${i}`, toId: `lis_${(i + 1) % resolution}` });
+          if (i % 3 === 0) {
+            lines.push({ fromId: `lis_${i}`, toId: `lis_${(i + 8) % resolution}` });
+          }
+        }
+        break;
+      }
+
+      case 'Mobius': {
+        const steps = 12;
+        const r = 0.5 - paddingScale;
+        for (let i = 0; i < steps; i++) {
+          const theta = (i / steps) * 2 * Math.PI;
+          const w = 0.15;
+          const x1 = half + (r + w * Math.cos(theta / 2)) * Math.cos(theta);
+          const y1 = half + (r + w * Math.cos(theta / 2)) * Math.sin(theta);
+          const x2 = half + (r - w * Math.cos(theta / 2)) * Math.cos(theta);
+          const y2 = half + (r - w * Math.cos(theta / 2)) * Math.sin(theta);
+          
+          list.push({ id: `mob_a_${i}`, x: x1, y: y1, role: 'outer', name: `MA${i}` });
+          list.push({ id: `mob_b_${i}`, x: x2, y: y2, role: 'inner', name: `MB${i}` });
+        }
+        for (let i = 0; i < steps; i++) {
+          const next = (i + 1) % steps;
+          lines.push({ fromId: `mob_a_${i}`, toId: `mob_a_${next}` });
+          lines.push({ fromId: `mob_b_${i}`, toId: `mob_b_${next}` });
+          lines.push({ fromId: `mob_a_${i}`, toId: `mob_b_${i}` });
+          if (i % 2 === 0) {
+            lines.push({ fromId: `mob_a_${i}`, toId: `mob_b_${next}` });
+          }
+        }
+        break;
+      }
+
+      case 'Lorenz': {
+        const pts = 16;
+        let xVal = 0.1, yVal = 0, zVal = 0;
+        const sigma = 10, rho = 28, beta = 8/3;
+        const dt = 0.012;
+        const r = (0.5 - paddingScale) * 0.04;
+        
+        for (let i = 0; i < pts; i++) {
+          const dx = sigma * (yVal - xVal) * dt;
+          const dy = (xVal * (rho - zVal) - yVal) * dt;
+          const dz = (xVal * yVal - beta * zVal) * dt;
+          xVal += dx;
+          yVal += dy;
+          zVal += dz;
+          
+          list.push({
+            id: `lz_${i}`,
+            x: half + xVal * r,
+            y: half + (yVal - 15) * r,
+            role: 'inner',
+            name: `LZ${i}`
+          });
+        }
+        for (let i = 0; i < pts; i++) {
+          if (i < pts - 1) lines.push({ fromId: `lz_${i}`, toId: `lz_${i+1}` });
+          if (i % 4 === 0 && i > 0) {
+            lines.push({ fromId: `lz_${i}`, toId: `lz_${i-4}` });
+          }
+        }
+        break;
+      }
+
+      case 'TorusKnot': {
+        const pts = 18;
+        const r = 0.5 - paddingScale;
+        const p = 3, q = 7;
+        for (let i = 0; i < pts; i++) {
+          const phi = (i / pts) * 2 * Math.PI;
+          const R = r * 0.7 + r * 0.3 * Math.cos(q * phi);
+          const x = half + R * Math.cos(p * phi);
+          const y = half + R * Math.sin(p * phi);
+          list.push({ id: `tk_${i}`, x, y, role: 'outer', name: `TK${i}` });
+        }
+        for (let i = 0; i < pts; i++) {
+          lines.push({ fromId: `tk_${i}`, toId: `tk_${(i + 1) % pts}` });
+          lines.push({ fromId: `tk_${i}`, toId: `tk_${(i + 5) % pts}` });
+        }
+        break;
+      }
+
+      case 'Fibonacci': {
+        const pts = 20;
+        const r = 0.5 - paddingScale;
+        const phiRatio = (Math.sqrt(5) + 1) / 2;
+        for (let i = 1; i <= pts; i++) {
+          const radius = r * Math.sqrt(i / pts);
+          const theta = i * 2 * Math.PI * phiRatio;
+          const x = half + radius * Math.cos(theta);
+          const y = half + radius * Math.sin(theta);
+          list.push({ id: `fib_${i}`, x, y, role: 'inner', name: `FB${i}` });
+        }
+        for (let i = 1; i <= pts; i++) {
+          if (i + 1 <= pts) lines.push({ fromId: `fib_${i}`, toId: `fib_${i+1}` });
+          if (i + 5 <= pts) lines.push({ fromId: `fib_${i}`, toId: `fib_${i+5}` });
+        }
+        break;
+      }
+
+      case 'Sierpinski': {
+        const r = 0.5 - paddingScale;
+        const triL = [
+          { id: 'sp_1', x: half, y: half - r },
+          { id: 'sp_2', x: half - r * 0.86, y: half + r * 0.5 },
+          { id: 'sp_3', x: half + r * 0.86, y: half + r * 0.5 },
+          { id: 'sp_12', x: half - r * 0.43, y: half - r * 0.25 },
+          { id: 'sp_23', x: half, y: half + r * 0.5 },
+          { id: 'sp_31', x: half + r * 0.43, y: half - r * 0.25 },
+          { id: 'sp_n1', x: half, y: half - r * 0.1 },
+          { id: 'sp_n2', x: half - r * 0.2, y: half + r * 0.2 },
+          { id: 'sp_n3', x: half + r * 0.2, y: half + r * 0.2 }
+        ];
+        triL.forEach(pt => {
+          list.push({ id: pt.id, x: pt.x, y: pt.y, role: 'outer', name: pt.id.toUpperCase().slice(-3) });
+        });
+        
+        lines.push({ fromId: 'sp_1', toId: 'sp_12' });
+        lines.push({ fromId: 'sp_12', toId: 'sp_2' });
+        lines.push({ fromId: 'sp_2', toId: 'sp_23' });
+        lines.push({ fromId: 'sp_23', toId: 'sp_3' });
+        lines.push({ fromId: 'sp_3', toId: 'sp_31' });
+        lines.push({ fromId: 'sp_31', toId: 'sp_1' });
+        
+        lines.push({ fromId: 'sp_12', toId: 'sp_23' });
+        lines.push({ fromId: 'sp_23', toId: 'sp_31' });
+        lines.push({ fromId: 'sp_31', toId: 'sp_12' });
+        lines.push({ fromId: 'sp_12', toId: 'sp_n1' });
+        lines.push({ fromId: 'sp_23', toId: 'sp_n2' });
+        lines.push({ fromId: 'sp_31', toId: 'sp_n3' });
+        lines.push({ fromId: 'sp_n1', toId: 'sp_n2' });
+        lines.push({ fromId: 'sp_n2', toId: 'sp_n3' });
+        lines.push({ fromId: 'sp_n3', toId: 'sp_n1' });
+        break;
+      }
+
+      case 'Julia': {
+        const pts = 16;
+        const r = 0.5 - paddingScale;
+        for (let i = 0; i < pts; i++) {
+          const angle = (i / pts) * 2 * Math.PI;
+          const radius = r * (0.45 + 0.55 * Math.sin(angle * 2));
+          const x = half + radius * Math.cos(angle);
+          const y = half + radius * Math.sin(angle);
+          list.push({ id: `jl_${i}`, x, y, role: 'inner', name: `JF${i}` });
+        }
+        for (let i = 0; i < pts; i++) {
+          lines.push({ fromId: `jl_${i}`, toId: `jl_${(i + 1) % pts}` });
+          lines.push({ fromId: `jl_${i}`, toId: `jl_${(i + 3) % pts}` });
+        }
+        break;
+      }
+
+      case 'Peano': {
+        const resolution = 4;
+        const r = 0.5 - paddingScale;
+        const span = r * 2;
+        const xStart = half - r;
+        const yStart = half - r;
+        
+        for (let i = 0; i < resolution; i++) {
+          for (let j = 0; j < resolution; j++) {
+            const x = xStart + (i / (resolution - 1)) * span;
+            const y = yStart + (j / (resolution - 1)) * span;
+            list.push({ id: `pe_${i}_${j}`, x, y, role: 'inner', name: `PN${i}${j}` });
+          }
+        }
+        for (let i = 0; i < resolution; i++) {
+          for (let j = 0; j < resolution; j++) {
+            if (i % 2 === 0 && j < resolution - 1) {
+              lines.push({ fromId: `pe_${i}_${j}`, toId: `pe_${i}_${j+1}` });
+            }
+            if (i % 2 !== 0 && j > 0) {
+              lines.push({ fromId: `pe_${i}_${j}`, toId: `pe_${i}_${j-1}` });
+            }
+            if (i < resolution - 1 && (j === 0 || j === resolution - 1)) {
+              lines.push({ fromId: `pe_${i}_${j}`, toId: `pe_${i+1}_${j}` });
+            }
+          }
+        }
+        break;
+      }
+
+      case 'DoubleHelix': {
+        const steps = 10;
+        const r = 0.5 - paddingScale;
+        for (let i = 0; i < steps; i++) {
+          const progress = i / (steps - 1);
+          const y = paddingScale + progress * (1.0 - paddingScale * 2);
+          const theta = progress * 4 * Math.PI;
+          const offset = r * 0.45 * Math.sin(theta);
+          
+          list.push({ id: `dh_a_${i}`, x: half + offset, y, role: 'outer', name: `DA${i}` });
+          list.push({ id: `dh_b_${i}`, x: half - offset, y, role: 'inner', name: `DB${i}` });
+        }
+        for (let i = 0; i < steps; i++) {
+          lines.push({ fromId: `dh_a_${i}`, toId: `dh_b_${i}` });
+          if (i < steps - 1) {
+            lines.push({ fromId: `dh_a_${i}`, toId: `dh_a_${i+1}` });
+            lines.push({ fromId: `dh_b_${i}`, toId: `dh_b_${i+1}` });
+          }
+        }
+        break;
+      }
+
+      case 'QuantumCloud': {
+        const count = 16;
+        const r = 0.5 - paddingScale;
+        for (let i = 0; i < count; i++) {
+          const angle = (i * 1.95) * 2 * Math.PI / count;
+          const radius = r * Math.abs(Math.sin(i * 3.7)) * 0.9 + 0.05;
+          const x = half + radius * Math.cos(angle);
+          const y = half + radius * Math.sin(angle);
+          list.push({ id: `qc_${i}`, x, y, role: 'inner', name: `QM${i}` });
+        }
+        for (let i = 0; i < count; i++) {
+          for (let j = i + 1; j < count; j++) {
+            const di = Math.hypot(list[i].x - list[j].x, list[i].y - list[j].y);
+            if (di < r * 0.65) {
+              lines.push({ fromId: `qc_${i}`, toId: `qc_${j}` });
+            }
+          }
+        }
+        break;
+      }
+
+      case 'Vortex': {
+        const rings = 3;
+        const countPerRing = 6;
+        const r = 0.5 - paddingScale;
+        list.push({ id: 'vtx_center', x: half, y: half, role: 'inner', name: 'CNTR' });
+        
+        for (let ring = 1; ring <= rings; ring++) {
+          const ringRadius = (ring / rings) * r;
+          for (let i = 0; i < countPerRing; i++) {
+            const angle = (i / countPerRing) * 2 * Math.PI + (ring * 0.18);
+            const x = half + ringRadius * Math.cos(angle);
+            const y = half + ringRadius * Math.sin(angle);
+            list.push({ id: `vtx_${ring}_${i}`, x, y, role: 'inner', name: `VTX${ring}${i}` });
+          }
+        }
+        for (let ring = 1; ring <= rings; ring++) {
+          for (let i = 0; i < countPerRing; i++) {
+            lines.push({ fromId: `vtx_${ring}_${i}`, toId: `vtx_${ring}_${(i + 1) % countPerRing}` });
+            if (ring === 1) {
+              lines.push({ fromId: `vtx_${ring}_${i}`, toId: 'vtx_center' });
+            } else {
+              lines.push({ fromId: `vtx_${ring}_${i}`, toId: `vtx_${ring-1}_${(i + 1) % countPerRing}` });
+            }
+          }
+        }
+        break;
+      }
     }
 
     // Apply manual overrides for non-hypercube structures
@@ -828,15 +1119,6 @@ export default function ServeoNetwork() {
 
   const handlePointerUp = () => {
     setDraggedVertexId(null);
-  };
-
-  const handleUndo = () => {
-    if (history.length === 0) return;
-    const previous = history[history.length - 1];
-    setHistory(prev => prev.slice(0, prev.length - 1));
-    setVertices(previous);
-    solveIntersections(previous, connections);
-    triggerToast('Undo successful! Restored previous state.');
   };
 
   // --- Exporters Engine (Scalable vector SVG, High-Res PNG) ---
@@ -1710,18 +1992,6 @@ export default function AnimatedNetworkWidget() {
             </button>
 
             {/* Undo step stack tracking */}
-            <button
-              onClick={handleUndo}
-              disabled={history.length === 0}
-              className={`p-1.5 rounded transition-colors ${
-                history.length > 0 
-                  ? 'text-zinc-300 hover:text-[#ff5500] bg-white/5 cursor-pointer' 
-                  : 'text-zinc-700 pointer-events-none opacity-40'
-              }`}
-              title="Undo coordinate movement"
-            >
-              <Undo2 size={12} />
-            </button>
           </div>
         </div>
 
@@ -1774,7 +2044,10 @@ export default function AnimatedNetworkWidget() {
             {([
               'Multipartite', 'Lattice', 'Complete', 'Bipartite', 
               'Wheel', 'Petersen', 'Circulant', 'Concentric', 
-              'Rose', 'Geodesic', 'Apollonian', 'Hypercube'
+              'Rose', 'Geodesic', 'Apollonian', 'Hypercube',
+              'Chladni', 'Lissajous', 'Mobius', 'Lorenz',
+              'TorusKnot', 'Fibonacci', 'Sierpinski', 'Julia',
+              'Peano', 'DoubleHelix', 'QuantumCloud', 'Vortex'
             ] as const).map(type => (
               <button
                 key={type}
@@ -1782,11 +2055,12 @@ export default function AnimatedNetworkWidget() {
                   setActiveType(type);
                   triggerToast(`Transitioned to ${type} model geometry.`);
                 }}
-                className={`py-1.5 px-2.5 rounded text-[10px] font-mono tracking-wider font-semibold uppercase text-left transition-all border cursor-pointer ${
+                className={`py-1.5 px-2.5 rounded text-[9px] font-mono tracking-wider font-semibold uppercase text-left transition-all border cursor-pointer truncate ${
                   activeType === type
                     ? 'bg-[#ff5500]/15 border-[#ff5500]/40 text-[#ff5500]'
                     : 'bg-white/5 border-transparent text-zinc-400 hover:bg-white/10 hover:text-[#ede8df]'
                 }`}
+                title={type}
               >
                 {type}
               </button>
